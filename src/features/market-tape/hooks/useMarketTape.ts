@@ -169,11 +169,11 @@ export function useMarketTape() {
   const cachedSnapshot = useMemo(() => readMarketTapeSnapshot(), [])
   const referenceSnapshot = useMemo(() => readMarketTapeReferenceSnapshot(), [])
   const sessionFetched = useMemo(() => hasMarketTapeSessionFetch(), [])
-  const canFetchMarketTape = !import.meta.env.DEV || Boolean(env.alphaVantageApiKey)
+  const canFetchMarketTape = !import.meta.env.DEV || Boolean(env.alphaVantageApiKey || env.twelveDataApiKey)
 
   const query = useQuery({
     queryKey: ['market-tape'],
-    queryFn: () => fetchMarketTape(env.alphaVantageApiKey),
+    queryFn: () => fetchMarketTape(env.alphaVantageApiKey, env.twelveDataApiKey),
     enabled: canFetchMarketTape && !sessionFetched,
     initialData: cachedSnapshot?.snapshot,
     initialDataUpdatedAt: cachedSnapshot?.updatedAt,
@@ -235,7 +235,7 @@ export function useMarketTape() {
   return {
     ...query,
     data: resolvedData,
-    hasConfiguredKey: Boolean(env.alphaVantageApiKey),
+    hasConfiguredKey: Boolean(env.alphaVantageApiKey || env.twelveDataApiKey),
   }
 }
 

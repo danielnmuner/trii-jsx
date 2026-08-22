@@ -57,6 +57,26 @@ type CommoditySpotResponse = {
   ['Error Message']?: string
 }
 
+type TwelveDataQuoteResponse =
+  | Record<string, TwelveDataQuoteEntry>
+  | TwelveDataQuoteEntry
+
+type TwelveDataQuoteEntry = {
+  symbol?: string
+  name?: string
+  exchange?: string
+  datetime?: string
+  timestamp?: number
+  last_quote_at?: number
+  close?: string
+  previous_close?: string
+  change?: string
+  percent_change?: string
+  code?: number
+  message?: string
+  status?: string
+}
+
 const INSTRUMENTS: MarketTapeInstrument[] = [
   { id: 'usd-cop', label: 'Dollar / COP', assetClass: 'fx', kind: 'fx', fromSymbol: 'USD', toSymbol: 'COP' },
   { id: 'eur-usd', label: 'Euro / USD', assetClass: 'fx', kind: 'fx', fromSymbol: 'EUR', toSymbol: 'USD' },
@@ -87,6 +107,28 @@ async function fetchAlphaVantage<T>(params: URLSearchParams, apiKey: string) {
   const payload = (await response.json().catch(() => null)) as T | null
   if (!response.ok || !payload) {
     throw new Error('Alpha Vantage request failed.')
+  }
+
+  return payload
+}
+
+async function fetchTwelveDataQuotes(apiKey: string) {
+  const symbols = INSTRUMENTS.map(getTwelveDataSymbol).join(',')
+  const params = new URLSearchParams({
+    symbol: symbols,
+    apikey: apiKey,
+  })
+
+  const response = await fetch(`https://api.twelvedata.com/quote?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+
+  const payload = (await response.json().catch(() => null)) as TwelveDataQuoteResponse | null
+  if (!response.ok || !payload) {
+    throw new Error('Twelve Data request failed.')
   }
 
   return payload
@@ -165,10 +207,10 @@ async function fetchInstrumentQuote(instrument: MarketTapeInstrument, apiKey: st
   return fetchCommoditySpotQuote(instrument, apiKey)
 }
 
-async function buildMarketTapeSnapshot(apiKey: string): Promise<MarketTapeSnapshot> {
+async function buildAlphaSnapshot(apiKey: string, instruments = INSTRUMENTS): Promise<MarketTapeSnapshot> {
   const quotes: MarketTapeQuote[] = []
 
-  for (const instrument of INSTRUMENTS) {
+  for (const instrument of instruments) {
     if (quotes.length > 0) {
       await sleep(REQUEST_GAP_MS)
     }
@@ -191,18 +233,145 @@ async function buildMarketTapeSnapshot(apiKey: string): Promise<MarketTapeSnapsh
   }
 }
 
+async function buildTwelveDataSnapshot(apiKey: string): Promise<MarketTapeSnapshot> {
+  const payload = await fetchTwelveDataQuotes(apiKey)
+  const entries = normalizeTwelveDataEntries(payload)
+  const quotes = INSTRUMENTS
+    .map((instrument) => mapTwelveDataQuote(instrument, entries.get(getTwelveDataSymbol(instrument))))
+    .filter((quote): quote is MarketTapeQuote => Boolean(quote))
+
+  if (quotes.length === 0) {
+    throw new Error('Twelve Data did not return any macro tape data.')
+  }
+
+  return {
+    fetchedAt: new Date().toISOString(),
+    quotes,
+  }
+}
+
+function mergeSnapshots(primary: MarketTapeSnapshot | null, fallback: MarketTapeSnapshot | null) {
+  if (!primary && !fallback) {
+    throw new Error('No market tape providers returned data.')
+  }
+
+  if (!primary) {
+    return fallback as MarketTapeSnapshot
+  }
+
+  if (!fallback) {
+    return primary
+  }
+
+  const merged = new Map(primary.quotes.map((quote) => [quote.id, quote]))
+  for (const quote of fallback.quotes) {
+    if (!merged.has(quote.id)) {
+      merged.set(quote.id, quote)
+    }
+  }
+
+  return {
+    fetchedAt: primary.fetchedAt,
+    quotes: INSTRUMENTS.map((instrument) => merged.get(instrument.id)).filter((quote): quote is MarketTapeQuote => Boolean(quote)),
+  }
+}
+
+function getTwelveDataSymbol(instrument: MarketTapeInstrument) {
+  if (instrument.kind === 'fx') {
+    return `${instrument.fromSymbol}/${instrument.toSymbol}`
+  }
+
+  return instrument.symbol === 'GOLD' ? 'XAU/USD' : 'XAG/USD'
+}
+
+function normalizeTwelveDataEntries(payload: TwelveDataQuoteResponse) {
+  if ('symbol' in payload || 'status' in payload) {
+    const entry = payload as TwelveDataQuoteEntry
+    const key = entry.symbol ?? ''
+    return new Map(key ? [[key, entry]] : [])
+  }
+
+  return new Map(
+    Object.entries(payload).map(([key, value]) => [key, value as TwelveDataQuoteEntry]),
+  )
+}
+
+function mapTwelveDataQuote(instrument: MarketTapeInstrument, entry: TwelveDataQuoteEntry | undefined): MarketTapeQuote | null {
+  if (!entry || entry.status === 'error' || entry.code) {
+    return null
+  }
+
+  const price = Number(entry.close)
+  const previousPrice = Number(entry.previous_close)
+  const delta = Number(entry.change)
+  const deltaPercent = Number(entry.percent_change)
+  if (
+    !Number.isFinite(price) ||
+    !Number.isFinite(previousPrice) ||
+    !Number.isFinite(delta) ||
+    !Number.isFinite(deltaPercent)
+  ) {
+    return null
+  }
+
+  return {
+    id: instrument.id,
+    label: instrument.label,
+    assetClass: instrument.assetClass,
+    price,
+    previousPrice,
+    delta,
+    deltaPercent,
+    asOf: formatTwelveDataTimestamp(entry),
+  }
+}
+
+function formatTwelveDataTimestamp(entry: TwelveDataQuoteEntry) {
+  if (typeof entry.last_quote_at === 'number' && Number.isFinite(entry.last_quote_at)) {
+    return new Date(entry.last_quote_at * 1000).toISOString()
+  }
+
+  if (typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp)) {
+    return new Date(entry.timestamp * 1000).toISOString()
+  }
+
+  if (entry.datetime) {
+    return `${entry.datetime}T00:00:00Z`
+  }
+
+  return new Date().toISOString()
+}
+
 export default async function handler(_request: unknown, response: {
   status: (code: number) => { json: (body: unknown) => void }
   setHeader: (name: string, value: string) => void
 }) {
-  const apiKey = process?.env?.ALPHA_VANTAGE_API_KEY || process?.env?.VITE_ALPHA_VANTAGE_API_KEY
-  if (!apiKey) {
-    response.status(500).json({ message: 'Missing ALPHA_VANTAGE_API_KEY.' })
+  const alphaApiKey = process?.env?.ALPHA_VANTAGE_API_KEY || process?.env?.VITE_ALPHA_VANTAGE_API_KEY
+  const twelveDataApiKey = process?.env?.TWELVE_DATA_API_KEY || process?.env?.VITE_TWELVE_DATA_API_KEY
+  if (!alphaApiKey && !twelveDataApiKey) {
+    response.status(500).json({ message: 'Missing market tape provider keys.' })
     return
   }
 
   try {
-    const snapshot = await buildMarketTapeSnapshot(apiKey)
+    const twelveSnapshot =
+      twelveDataApiKey
+        ? await buildTwelveDataSnapshot(twelveDataApiKey).catch(() => null)
+        : null
+    const missingInstrumentIds = new Set(INSTRUMENTS.map((instrument) => instrument.id))
+    for (const quote of twelveSnapshot?.quotes ?? []) {
+      missingInstrumentIds.delete(quote.id)
+    }
+
+    const alphaSnapshot =
+      alphaApiKey && missingInstrumentIds.size > 0
+        ? await buildAlphaSnapshot(
+            alphaApiKey,
+            INSTRUMENTS.filter((instrument) => missingInstrumentIds.has(instrument.id)),
+          ).catch(() => null)
+        : null
+
+    const snapshot = mergeSnapshots(twelveSnapshot, alphaSnapshot)
     response.setHeader('Cache-Control', `public, s-maxage=${CDN_CACHE_SECONDS}, stale-while-revalidate=${CDN_CACHE_SECONDS}`)
     response.status(200).json(snapshot)
   } catch (error) {

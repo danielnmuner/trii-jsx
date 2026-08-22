@@ -1,4 +1,5 @@
 import { MARKET_TAPE_INSTRUMENTS, MARKET_TAPE_REQUEST_GAP_MS, type MarketTapeAssetClass, type MarketTapeInstrument } from '../lib/instruments'
+import { env } from '../../../shared/config/env'
 
 export type MarketTapeQuote = {
   id: string
@@ -54,6 +55,26 @@ type CommoditySeriesResponse = {
   ['Error Message']?: string
 }
 
+type TwelveDataQuoteResponse =
+  | Record<string, TwelveDataQuoteEntry>
+  | TwelveDataQuoteEntry
+
+type TwelveDataQuoteEntry = {
+  symbol?: string
+  name?: string
+  exchange?: string
+  datetime?: string
+  timestamp?: number
+  last_quote_at?: number
+  close?: string
+  previous_close?: string
+  change?: string
+  percent_change?: string
+  code?: number
+  message?: string
+  status?: string
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
@@ -90,6 +111,29 @@ async function fetchMarketTapeFromProxy(): Promise<MarketTapeSnapshot> {
       ? payload.message
       : 'Market tape proxy request failed.'
     throw new Error(message)
+  }
+
+  return payload
+}
+
+async function fetchTwelveDataQuotes(apiKey: string) {
+  const symbols = MARKET_TAPE_INSTRUMENTS.map(getTwelveDataSymbol).join(',')
+  const params = new URLSearchParams({
+    symbol: symbols,
+    apikey: apiKey,
+  })
+
+  const response = await fetch(`https://api.twelvedata.com/quote?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  })
+
+  const payload = (await response.json().catch(() => null)) as TwelveDataQuoteResponse | null
+  if (!response.ok || !payload) {
+    throw new Error('Twelve Data request failed.')
   }
 
   return payload
@@ -267,18 +311,10 @@ async function fetchInstrumentQuote(instrument: MarketTapeInstrument, apiKey: st
   return fetchCommodityHistoryQuote(instrument, apiKey)
 }
 
-export async function fetchMarketTape(apiKey: string): Promise<MarketTapeSnapshot> {
-  if (typeof window !== 'undefined' && !import.meta.env.DEV) {
-    try {
-      return await fetchMarketTapeFromProxy()
-    } catch (error) {
-      throw error
-    }
-  }
-
+async function buildAlphaSnapshot(apiKey: string, instruments = MARKET_TAPE_INSTRUMENTS): Promise<MarketTapeSnapshot> {
   const quotes: MarketTapeQuote[] = []
 
-  for (const instrument of MARKET_TAPE_INSTRUMENTS) {
+  for (const instrument of instruments) {
     if (quotes.length > 0) {
       await sleep(MARKET_TAPE_REQUEST_GAP_MS)
     }
@@ -299,4 +335,146 @@ export async function fetchMarketTape(apiKey: string): Promise<MarketTapeSnapsho
     fetchedAt: new Date().toISOString(),
     quotes,
   }
+}
+
+async function buildTwelveDataSnapshot(apiKey: string): Promise<MarketTapeSnapshot> {
+  const payload = await fetchTwelveDataQuotes(apiKey)
+  const entries = normalizeTwelveDataEntries(payload)
+  const quotes = MARKET_TAPE_INSTRUMENTS
+    .map((instrument) => mapTwelveDataQuote(instrument, entries.get(getTwelveDataSymbol(instrument))))
+    .filter((quote): quote is MarketTapeQuote => Boolean(quote))
+
+  if (quotes.length === 0) {
+    throw new Error('Twelve Data did not return any macro instruments.')
+  }
+
+  return {
+    fetchedAt: new Date().toISOString(),
+    quotes,
+  }
+}
+
+function mergeSnapshots(primary: MarketTapeSnapshot | null, fallback: MarketTapeSnapshot | null) {
+  if (!primary && !fallback) {
+    throw new Error('No market tape providers returned data.')
+  }
+
+  if (!primary) {
+    return fallback as MarketTapeSnapshot
+  }
+
+  if (!fallback) {
+    return primary
+  }
+
+  const merged = new Map(primary.quotes.map((quote) => [quote.id, quote]))
+  for (const quote of fallback.quotes) {
+    if (!merged.has(quote.id)) {
+      merged.set(quote.id, quote)
+    }
+  }
+
+  return {
+    fetchedAt: primary.fetchedAt,
+    quotes: MARKET_TAPE_INSTRUMENTS
+      .map((instrument) => merged.get(instrument.id))
+      .filter((quote): quote is MarketTapeQuote => Boolean(quote)),
+  }
+}
+
+export async function fetchMarketTape(alphaApiKey: string, twelveDataApiKey = env.twelveDataApiKey): Promise<MarketTapeSnapshot> {
+  if (typeof window !== 'undefined' && !import.meta.env.DEV) {
+    try {
+      return await fetchMarketTapeFromProxy()
+    } catch (error) {
+      throw error
+    }
+  }
+
+  const twelveSnapshot =
+    twelveDataApiKey
+      ? await buildTwelveDataSnapshot(twelveDataApiKey).catch(() => null)
+      : null
+  const missingInstrumentIds = new Set(
+    MARKET_TAPE_INSTRUMENTS.map((instrument) => instrument.id),
+  )
+  for (const quote of twelveSnapshot?.quotes ?? []) {
+    missingInstrumentIds.delete(quote.id)
+  }
+
+  const alphaSnapshot =
+    alphaApiKey && missingInstrumentIds.size > 0
+      ? await buildAlphaSnapshot(
+          alphaApiKey,
+          MARKET_TAPE_INSTRUMENTS.filter((instrument) => missingInstrumentIds.has(instrument.id)),
+        ).catch(() => null)
+      : null
+
+  return mergeSnapshots(twelveSnapshot, alphaSnapshot)
+}
+
+function getTwelveDataSymbol(instrument: MarketTapeInstrument) {
+  if (instrument.kind === 'fx') {
+    return `${instrument.fromSymbol}/${instrument.toSymbol}`
+  }
+
+  return instrument.symbol === 'GOLD' ? 'XAU/USD' : 'XAG/USD'
+}
+
+function normalizeTwelveDataEntries(payload: TwelveDataQuoteResponse) {
+  if ('symbol' in payload || 'status' in payload) {
+    const entry = payload as TwelveDataQuoteEntry
+    const key = entry.symbol ?? ''
+    return new Map(key ? [[key, entry]] : [])
+  }
+
+  return new Map(
+    Object.entries(payload).map(([key, value]) => [key, value as TwelveDataQuoteEntry]),
+  )
+}
+
+function mapTwelveDataQuote(instrument: MarketTapeInstrument, entry: TwelveDataQuoteEntry | undefined): MarketTapeQuote | null {
+  if (!entry || entry.status === 'error' || entry.code) {
+    return null
+  }
+
+  const price = Number(entry.close)
+  const previousPrice = Number(entry.previous_close)
+  const delta = Number(entry.change)
+  const deltaPercent = Number(entry.percent_change)
+  if (
+    !Number.isFinite(price) ||
+    !Number.isFinite(previousPrice) ||
+    !Number.isFinite(delta) ||
+    !Number.isFinite(deltaPercent)
+  ) {
+    return null
+  }
+
+  return {
+    id: instrument.id,
+    label: instrument.label,
+    assetClass: instrument.assetClass,
+    price,
+    previousPrice,
+    delta,
+    deltaPercent,
+    asOf: formatTwelveDataTimestamp(entry),
+  }
+}
+
+function formatTwelveDataTimestamp(entry: TwelveDataQuoteEntry) {
+  if (typeof entry.last_quote_at === 'number' && Number.isFinite(entry.last_quote_at)) {
+    return new Date(entry.last_quote_at * 1000).toISOString()
+  }
+
+  if (typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp)) {
+    return new Date(entry.timestamp * 1000).toISOString()
+  }
+
+  if (entry.datetime) {
+    return `${entry.datetime}T00:00:00Z`
+  }
+
+  return new Date().toISOString()
 }

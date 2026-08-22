@@ -4,8 +4,8 @@ import { AnalyticsPage } from '../../features/analytics/pages/AnalyticsPage'
 export function AppRouter() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/analytics" replace />} />
-      <Route path="/analytics" element={<AnalyticsPage />} />
+      <Route path="/" element={<AnalyticsPage />} />
+      <Route path="/analytics" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

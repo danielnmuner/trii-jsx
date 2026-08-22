@@ -12,9 +12,12 @@ export function renderWithProviders(element: ReactElement) {
     },
   })
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>{element}</BrowserRouter>
-    </QueryClientProvider>,
-  )
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>{element}</BrowserRouter>
+      </QueryClientProvider>,
+    ),
+  }
 }

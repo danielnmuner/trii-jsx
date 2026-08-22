@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SeasonalityProfile } from '../api/schemas'
+
 type SeasonalityMiniChartProps = {
   profile?: SeasonalityProfile
   capturedAt?: string | null
@@ -49,7 +50,10 @@ export function SeasonalityMiniChart({ profile, capturedAt }: SeasonalityMiniCha
     return (
       <section className="overview-tape__item overview-tape__item--seasonality" aria-label="Seasonality profile">
         <div className="overview-seasonality__topline">
-          <span className="overview-tape__label">Seasonality</span>
+          <div className="overview-seasonality__titleBlock">
+            <span className="overview-tape__label">Seasonality</span>
+            <span className="overview-seasonality__metricLabel">Accumulated Volume</span>
+          </div>
         </div>
         <div className="overview-seasonality__empty">No weekly profile</div>
       </section>
@@ -65,12 +69,20 @@ export function SeasonalityMiniChart({ profile, capturedAt }: SeasonalityMiniCha
     accumulatedVolume: sanitizeNumber(activeHours[time]?.accumulated_volume),
   }))
 
-  const maxVolume = Math.max(...buckets.map((bucket) => bucket.accumulatedVolume), 0)
+  const totalDeltaSamples = bucketKeys.reduce((sum, time) => sum + sanitizeNumber(activeHours[time]?.delta_samples), 0)
+  const maxAccumulatedVolume = Math.max(...buckets.map((bucket) => bucket.accumulatedVolume), 0)
+
   return (
     <section className="overview-tape__item overview-tape__item--seasonality" aria-label="Seasonality profile">
       <div className="overview-seasonality__topline">
-        <span className="overview-tape__label">Seasonality</span>
-        <span className="overview-seasonality__active-day">{weekdayMeta[activeDay].label}</span>
+        <div className="overview-seasonality__titleBlock">
+          <span className="overview-tape__label">Seasonality</span>
+          <span className="overview-seasonality__metricLabel">Accumulated Volume</span>
+        </div>
+        <div className="overview-seasonality__activeMeta">
+          <span className="overview-seasonality__active-day">{weekdayMeta[activeDay].label}</span>
+          <span className="overview-seasonality__active-samples">{new Intl.NumberFormat('en-US').format(totalDeltaSamples)}</span>
+        </div>
       </div>
 
       <div
@@ -79,7 +91,7 @@ export function SeasonalityMiniChart({ profile, capturedAt }: SeasonalityMiniCha
         style={{ gridTemplateColumns: `repeat(${Math.max(buckets.length, 1)}, minmax(0, 1fr))` }}
       >
         {buckets.map((bucket) => {
-          const height = maxVolume <= 0 ? 8 : Math.max((bucket.accumulatedVolume / maxVolume) * 100, 8)
+          const height = maxAccumulatedVolume <= 0 ? 8 : Math.max((bucket.accumulatedVolume / maxAccumulatedVolume) * 100, 8)
           return (
             <div key={bucket.time} className="overview-seasonality__bar-group">
               <div

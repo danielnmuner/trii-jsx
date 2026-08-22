@@ -31,6 +31,32 @@ export function formatCurrency(value: number | null | undefined) {
   }).format(value)}`
 }
 
+export function formatMillions(value: number | null | undefined, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'n/a'
+  }
+
+  return `${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  }).format(value / 1_000_000)} M`
+}
+
+export function formatMillionsWhenLarge(
+  value: number | null | undefined,
+  options: { digits?: number; fallback?: 'integer' | 'number' } = {},
+) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'n/a'
+  }
+
+  if (Math.abs(value) < 1_000_000) {
+    return options.fallback === 'number' ? formatNumber(value) : formatInteger(value)
+  }
+
+  return formatMillions(value, options.digits ?? 2)
+}
+
 export function formatPercentFromWhole(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return 'n/a'
@@ -40,6 +66,17 @@ export function formatPercentFromWhole(value: number | null | undefined) {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   }).format(value / 100)}%`
+}
+
+export function formatPercentFromFraction(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'n/a'
+  }
+
+  return `${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  }).format(value * 100)}%`
 }
 
 export function formatTimestamp(value: string | null | undefined) {
@@ -114,11 +151,17 @@ export function formatMetricValue(metricKey: string, value: number | null | unde
   if (metricKey === 'spread_bps') {
     return `${formatNumber(value)} bps`
   }
-  if (metricKey === 'traded_volume' || metricKey === 'spread') {
+  if (metricKey === 'spread') {
     return formatInteger(value)
   }
   if (metricKey === 'traded_value') {
-    return formatInteger(value)
+    return formatMillions(value, 1)
+  }
+  if (metricKey === 'traded_volume' || metricKey === 'value_rate') {
+    return formatMillionsWhenLarge(value, {
+      digits: 2,
+      fallback: metricKey === 'value_rate' ? 'number' : 'integer',
+    })
   }
   if (metricKey === 'vwap_cumulative' || metricKey === 'mid_price' || metricKey === 'microprice') {
     return formatNumber(value)

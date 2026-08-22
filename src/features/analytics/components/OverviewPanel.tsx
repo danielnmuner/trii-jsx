@@ -1,5 +1,6 @@
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
+import { SymbolIdentity } from './SymbolIdentity'
 import {
   computeCumulativeVwap,
   formatBandDelta,
@@ -7,7 +8,6 @@ import {
   formatMetricValue,
   formatPercentFromWhole,
   formatSampleCount,
-  formatTimestamp,
 } from '../lib/formatters'
 
 type OverviewPanelProps = {
@@ -16,6 +16,7 @@ type OverviewPanelProps = {
 
 type TapeTone = 'positive' | 'negative' | 'neutral'
 type ZTone = 'anomaly' | 'review' | 'normal'
+type BadgeTone = 'fresh' | 'stale'
 
 type TapeItemData = {
   key: string
@@ -23,6 +24,8 @@ type TapeItemData = {
   label?: string
   primary?: string
   secondary?: string
+  badge?: string
+  badgeTone?: BadgeTone
   zScore?: string
   zSignal?: string
   zTone?: ZTone
@@ -59,6 +62,8 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
             className: 'overview-tape__item overview-tape__item--symbol',
             label: 'Symbol',
             primary: snapshot.symbol,
+            badge: formatFreshnessTimestamp(current.captured_at),
+            badgeTone: deriveFreshnessTone(current.captured_at),
             secondary: formatSampleCount(sampleCount),
           },
           buildMicrostructureItem('OBI L1', 'obi_l1', current.obi_l1, previous?.obi_l1, currentStats.obi_l1),
@@ -125,8 +130,9 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
           <article key={snapshot.symbol} className="overview-card">
             <header className="overview-card__header">
               <div className="overview-card__title">
-                <h3>{snapshot.symbol}</h3>
-                <p>{formatTimestamp(current.captured_at)}</p>
+                <h3>
+                  <SymbolIdentity symbol={snapshot.symbol} />
+                </h3>
               </div>
             </header>
 
@@ -191,6 +197,12 @@ function TapeItem({ item }: { item: TapeItemData }) {
           </div>
         ) : null}
       </div>
+
+      {item.badge ? (
+        <div className="overview-tape__badgeRow">
+          <span className={`overview-tape__badge overview-tape__badge--${item.badgeTone ?? 'fresh'}`}>{item.badge}</span>
+        </div>
+      ) : null}
 
       {item.inline ? (
         <div className="overview-tape__sub overview-tape__sub--inline">
@@ -286,4 +298,46 @@ function deriveSpread(bestAsk: number | null | undefined, bestBid: number | null
   }
 
   return bestAsk - bestBid
+}
+
+function formatFreshnessTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return 'n/a'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'n/a'
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Bogota',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  )
+
+  return `${parts.month ?? '--'}-${parts.day ?? '--'} ${parts.hour ?? '--'}:${parts.minute ?? '--'}`
+}
+
+function deriveFreshnessTone(value: string | null | undefined): BadgeTone {
+  if (!value) {
+    return 'stale'
+  }
+
+  const capturedAt = new Date(value).getTime()
+  if (Number.isNaN(capturedAt)) {
+    return 'stale'
+  }
+
+  const diffMs = Math.max(0, Date.now() - capturedAt)
+  return diffMs <= 5 * 60 * 1000 ? 'fresh' : 'stale'
 }

@@ -51,6 +51,7 @@ Usa:
 VITE_USE_MOCKS=true
 VITE_TRII_API_BASE_URL=/api
 VITE_TRII_API_TOKEN=
+VITE_ALPHA_VANTAGE_API_KEY=
 ```
 
 Con esta configuracion, la app usa MSW y responde con data mockeada en el browser.
@@ -65,11 +66,25 @@ Usa:
 VITE_USE_MOCKS=false
 VITE_TRII_API_BASE_URL=<tu-api-gateway>
 VITE_TRII_API_TOKEN=<tu-token>
+VITE_ALPHA_VANTAGE_API_KEY=<tu-alpha-vantage-key>
 ```
 
 Importante:
 - `VITE_TRII_API_TOKEN` no debe exponerse en un frontend productivo browser-side.
+- `VITE_ALPHA_VANTAGE_API_KEY` habilita la banda macro y tambien quedaria expuesta browser-side si la app se publica sin un proxy o cache server-side.
 - Esto sirve solo como flujo temporal de desarrollo local.
+
+## Market Tape En Vercel
+
+Para despliegue productivo, la banda macro usa `api/market-tape` como proxy con cache server-side.
+
+Configura en Vercel:
+
+```env
+ALPHA_VANTAGE_API_KEY=<tu-alpha-vantage-key>
+```
+
+En local, si `api/market-tape` no existe, la app hace fallback al cliente directo solo en modo desarrollo.
 
 ## Scripts utiles
 

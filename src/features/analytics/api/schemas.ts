@@ -34,10 +34,15 @@ export const snapshotRecordSchema = z
 export const historicStatSchema = z
   .object({
     pk: z.string().optional(),
+    sk: z.string().optional(),
+    symbol: z.string().optional(),
     metric: z.string().optional(),
     latest_value: z.number().nullable().optional(),
     mean: z.number().nullable().optional(),
     stddev: z.number().nullable().optional(),
+    m2: z.number().nullable().optional(),
+    min_value: z.number().nullable().optional(),
+    max_value: z.number().nullable().optional(),
     sample_count: z.number().optional().default(0),
   })
   .passthrough()
@@ -165,15 +170,72 @@ export const analyticsHistoricStatsResponseSchema = z.object({
   }),
 })
 
+export const zscoreMetricSampleSchema = z
+  .object({
+    sample_value: z.number().nullable().optional(),
+    z_score: z.number().nullable().optional(),
+  })
+  .passthrough()
+
+export const zscoreOpportunityRecordSchema = z
+  .object({
+    snapshot_checksum: z.string().optional(),
+    symbol: z.string(),
+    trading_date: z.string().nullable().optional(),
+    captured_at: z.string(),
+    last_price: z.number().nullable().optional(),
+    daily_change_amount: z.number().nullable().optional(),
+    daily_change_percent: z.number().nullable().optional(),
+    previous_close: z.number().nullable().optional(),
+    high_price: z.number().nullable().optional(),
+    low_price: z.number().nullable().optional(),
+    triggered_z_scores: z
+      .object({
+        obi_l1: zscoreMetricSampleSchema.optional(),
+        obi_top_5: zscoreMetricSampleSchema.optional(),
+        spread_bps: zscoreMetricSampleSchema.optional(),
+        traded_value: zscoreMetricSampleSchema.optional(),
+        traded_volume: zscoreMetricSampleSchema.optional(),
+      })
+      .partial()
+      .passthrough()
+      .default({}),
+  })
+  .passthrough()
+
 export const zscoreOpportunityResponseSchema = z.object({
   status: z.literal('ok'),
   result: z.object({
     symbol: z.string().nullable().optional(),
     trading_date: z.string().nullable().optional(),
     record_count: z.number(),
-    records: z.array(z.record(z.string(), z.unknown())),
+    records: z.array(zscoreOpportunityRecordSchema),
   }),
 })
+
+export const dailyClosingRecordSchema = z
+  .object({
+    symbol: z.string(),
+    trading_date: z.string(),
+    asset_name: z.string().nullable().optional(),
+    best_ask_price: z.number().nullable().optional(),
+    best_bid_price: z.number().nullable().optional(),
+    currency: z.string().nullable().optional(),
+    daily_change_amount: z.number().nullable().optional(),
+    daily_change_percent: z.number().nullable().optional(),
+    high_price: z.number().nullable().optional(),
+    last_price: z.number().nullable().optional(),
+    low_price: z.number().nullable().optional(),
+    previous_close: z.number().nullable().optional(),
+    record_type: z.string().nullable().optional(),
+    source_captured_at: z.string().nullable().optional(),
+    source_snapshot_checksum: z.string().nullable().optional(),
+    stored_at: z.string().nullable().optional(),
+    timezone: z.string().nullable().optional(),
+    traded_value: z.number().nullable().optional(),
+    traded_volume: z.number().nullable().optional(),
+  })
+  .passthrough()
 
 export const dailyClosingResponseSchema = z.object({
   status: z.literal('ok'),
@@ -181,7 +243,7 @@ export const dailyClosingResponseSchema = z.object({
     symbol: z.string().nullable().optional(),
     trading_date: z.string().nullable().optional(),
     record_count: z.number(),
-    records: z.array(z.record(z.string(), z.unknown())),
+    records: z.array(dailyClosingRecordSchema),
   }),
 })
 
@@ -193,6 +255,10 @@ export type AnalyticsHistoricStatsResult = AnalyticsHistoricStatsResponse['resul
 export type SnapshotRecord = z.infer<typeof snapshotRecordSchema>
 export type HistoricStat = z.infer<typeof historicStatSchema>
 export type SeasonalityProfile = z.infer<typeof seasonalityProfileSchema>
+export type ZscoreMetricSample = z.infer<typeof zscoreMetricSampleSchema>
+export type ZscoreOpportunityRecord = z.infer<typeof zscoreOpportunityRecordSchema>
+export type ZscoreOpportunityResponse = z.infer<typeof zscoreOpportunityResponseSchema>
+export type DailyClosingRecord = z.infer<typeof dailyClosingRecordSchema>
 export type AnalyticsSymbolFeed = AnalyticsSnapshotResult & {
   current_stats: Record<string, HistoricStat>
   seasonality_profile?: SeasonalityProfile

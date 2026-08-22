@@ -1,104 +1,250 @@
 import 'katex/dist/katex.min.css'
 
 import katex from 'katex'
-import { alertDiagnosticReferences, tacticalDiagnosticReferences, type DiagnosticReferenceItem } from '../lib/diagnosticReferences'
+import { useState } from 'react'
+import {
+  alertDiagnosticReferences,
+  faqEntries,
+  tacticalDiagnosticReferences,
+  type DiagnosticReferenceItem,
+  type UserGuideFaqItem,
+} from '../lib/diagnosticReferences'
+
+const newsReferences = [
+  {
+    label: 'Valora Analitik',
+    href: 'https://www.valoraanalitik.com/noticias-bolsa-de-valores/',
+    logo: '/icons/valoraanalitik.png',
+  },
+  {
+    label: 'La Republica',
+    href: 'https://www.larepublica.co/bolsa-de-valores-de-colombia',
+    logo: '/icons/lr.png',
+  },
+  {
+    label: 'Bloomberg Linea',
+    href: 'https://www.bloomberglinea.com/tags/bolsa-de-valores-de-colombia/',
+    logo: '/icons/bloomberg.png',
+  },
+  {
+    label: 'BVC',
+    href: 'https://www.bvc.com.co/?tab=indices_accionarios&tabNoticias=comunicados-de-prensa',
+    logo: '/icons/bvc.png',
+  },
+  {
+    label: 'Superfinanciera',
+    href: 'https://www.superfinanciera.gov.co/SIMEV2/informacionrelevantegeneral',
+    logo: '/icons/sfc.png',
+  },
+] as const
 
 export function DiagnosticsPanel() {
+  const [activeCard, setActiveCard] = useState<string | null>(null)
+  const [activeFaq, setActiveFaq] = useState<string | null>(faqEntries[0]?.question ?? null)
+
   return (
-    <section className="diagnostic-reference">
-      <header className="diagnostic-reference__header">
-        <div className="diagnostic-reference__copy">
-          <h3>Diagnostics reference</h3>
-          <p>
-            Practical reading guide for intraday execution. Use it as a disciplined framework, not as a rigid rulebook:
-            thresholds and signal quality can vary by symbol, liquidity regime, and session state.
-          </p>
-        </div>
-      </header>
+    <section className="user-guide">
+      <div className="user-guide__layout">
+        <section className="user-guide__faqSection">
+          <div className="user-guide__sectionBar">
+            <span className="user-guide__sectionTag">FAQs</span>
+          </div>
 
-      <DiagnosticBand
-        title="Tactical reads"
-        subtitle="Execution quality, top-of-book bias, and where price stands relative to session flow."
-        variant="tactical"
-        items={tacticalDiagnosticReferences}
-      />
+          <div className="user-guide__faqList">
+            {faqEntries.map((entry) => (
+              <FaqCard
+                key={entry.question}
+                entry={entry}
+                isOpen={activeFaq === entry.question}
+                onToggle={() => setActiveFaq((current) => (current === entry.question ? null : entry.question))}
+              />
+            ))}
+          </div>
+        </section>
 
-      <DiagnosticBand
-        title="Alert reads"
-        subtitle="Outlier conditions and structural mismatches that deserve extra caution before acting."
-        variant="alerts"
-        items={alertDiagnosticReferences}
-      />
+        <section className="user-guide__formulaColumn">
+          <GuideShelf
+            accent="execution"
+            items={tacticalDiagnosticReferences}
+            sectionKey="execution"
+            title="Execution"
+            activeCard={activeCard}
+            onActiveCardChange={setActiveCard}
+          />
+
+          <GuideShelf
+            accent="risk"
+            items={alertDiagnosticReferences}
+            sectionKey="risk"
+            title="Risk"
+            activeCard={activeCard}
+            onActiveCardChange={setActiveCard}
+          />
+
+          <section className="user-guide__formulaSection">
+            <div className="user-guide__sectionBar">
+              <span className="user-guide__sectionTag user-guide__sectionTag--news">News Flow</span>
+            </div>
+
+            <div className="user-guide__newsGrid">
+              {newsReferences.map((reference) => (
+                <a
+                  key={reference.label}
+                  className="user-guide__newsLink"
+                  href={reference.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={reference.label}
+                  title={reference.label}
+                >
+                  <img
+                    src={reference.logo}
+                    alt={reference.label}
+                    className="user-guide__newsLogo"
+                  />
+                </a>
+              ))}
+            </div>
+          </section>
+        </section>
+      </div>
     </section>
   )
 }
 
-function DiagnosticBand({
-  title,
-  subtitle,
-  variant,
+function GuideShelf({
+  accent,
+  activeCard,
   items,
+  onActiveCardChange,
+  sectionKey,
+  title,
 }: {
-  title: string
-  subtitle: string
-  variant: 'tactical' | 'alerts'
+  accent: 'execution' | 'risk'
+  activeCard: string | null
   items: DiagnosticReferenceItem[]
+  onActiveCardChange: (value: string | null) => void
+  sectionKey: string
+  title: string
 }) {
   return (
-    <section className={`diagnostic-reference__panel diagnostic-reference__panel--${variant}`}>
-      <div className="diagnostic-reference__panel-header">
-        <div className="diagnostic-reference__panel-copy">
-          <h4>{title}</h4>
-          <p>{subtitle}</p>
-        </div>
+    <section className="user-guide__formulaSection">
+      <div className="user-guide__sectionBar">
+        <span className={`user-guide__sectionTag user-guide__sectionTag--${accent}`}>{title}</span>
       </div>
 
-      <div className="diagnostic-reference__band">
-        {items.map((item) => (
-          <ReferenceCard key={`${variant}-${item.title}`} item={item} />
-        ))}
+      <div className="user-guide__formulaGrid">
+        {items.map((item) => {
+          const cardKey = `${sectionKey}-${item.title}`
+          return (
+            <GuideFormulaCard
+              key={cardKey}
+              accent={accent}
+              active={activeCard === cardKey}
+              item={item}
+              onActiveChange={(nextActive) => onActiveCardChange(nextActive ? cardKey : null)}
+            />
+          )
+        })}
       </div>
     </section>
   )
 }
 
-function ReferenceCard({ item }: { item: DiagnosticReferenceItem }) {
+function GuideFormulaCard({
+  accent,
+  active,
+  item,
+  onActiveChange,
+}: {
+  accent: 'execution' | 'risk'
+  active: boolean
+  item: DiagnosticReferenceItem
+  onActiveChange: (value: boolean) => void
+}) {
   return (
-    <article className="diagnostic-reference__card">
-      <h5 className="diagnostic-reference__title">{item.title}</h5>
+    <article
+      className={`user-guide__formulaCard user-guide__formulaCard--${accent} ${active ? 'user-guide__formulaCard--active' : ''}`}
+      onMouseEnter={() => onActiveChange(true)}
+      onMouseLeave={() => onActiveChange(false)}
+    >
+      <button
+        type="button"
+        className="user-guide__formulaTrigger"
+        aria-expanded={active}
+        onFocus={() => onActiveChange(true)}
+        onBlur={() => onActiveChange(false)}
+        onClick={() => onActiveChange(!active)}
+      >
+        <span className="user-guide__formulaTitle">{item.title}</span>
+        <LatexLine className="user-guide__formulaLine" expression={item.primaryFormula} />
+        <span className="user-guide__formulaHint">Hover for rules</span>
+      </button>
 
-      <div className="diagnostic-reference__section">
-        <div className="diagnostic-reference__label">Formula</div>
-        <div className="diagnostic-reference__math-stack">
-          {item.formulas.map((formula) => (
-            <LatexLine key={formula} expression={formula} />
-          ))}
+      <div className={`user-guide__hoverCard ${active ? 'user-guide__hoverCard--visible' : ''}`}>
+        {item.supportingFormula ? (
+          <div className="user-guide__hoverBlock">
+            <span className="user-guide__hoverLabel">Support</span>
+            <LatexLine className="user-guide__hoverFormula" expression={item.supportingFormula} />
+          </div>
+        ) : null}
+
+        <div className="user-guide__hoverBlock">
+          <span className="user-guide__hoverLabel">Rules</span>
+          <ul className="user-guide__ruleList">
+            {item.rules.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
         </div>
-      </div>
 
-      <div className="diagnostic-reference__section">
-        <div className="diagnostic-reference__label">Rules</div>
-        <div className="diagnostic-reference__math-stack diagnostic-reference__math-stack--rules">
-          {item.rules.map((rule) => (
-            <LatexLine key={rule} expression={rule} />
-          ))}
+        <div className="user-guide__hoverBlock">
+          <span className="user-guide__hoverLabel">Description</span>
+          <p className="user-guide__hoverCopy">{item.description}</p>
         </div>
-      </div>
-
-      <div className="diagnostic-reference__section">
-        <div className="diagnostic-reference__label">Description</div>
-        <p className="diagnostic-reference__description">{item.description}</p>
       </div>
     </article>
   )
 }
 
-function LatexLine({ expression }: { expression: string }) {
+function FaqCard({
+  entry,
+  isOpen,
+  onToggle,
+}: {
+  entry: UserGuideFaqItem
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  return (
+    <article className={`user-guide__faqCard ${isOpen ? 'user-guide__faqCard--open' : ''}`}>
+      <button
+        type="button"
+        className="user-guide__faqQuestion"
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
+        <span>{entry.question}</span>
+        <span className={`user-guide__faqIcon ${isOpen ? 'user-guide__faqIcon--open' : ''}`} aria-hidden="true">
+          +
+        </span>
+      </button>
+
+      <div className={`user-guide__faqAnswer ${isOpen ? 'user-guide__faqAnswer--open' : ''}`}>
+        {entry.answerParagraphs.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function LatexLine({ className, expression }: { className?: string; expression: string }) {
   const html = katex.renderToString(expression, {
     throwOnError: false,
     displayMode: false,
     strict: 'ignore',
   })
 
-  return <div className="diagnostic-reference__math-line" dangerouslySetInnerHTML={{ __html: html }} />
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />
 }

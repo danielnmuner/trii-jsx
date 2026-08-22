@@ -3,8 +3,8 @@ import {
   analyticsCatalogFixture,
   analyticsHistoricStatsFixtures,
   analyticsSnapshotFixtures,
-  dailyClosingFixture,
-  zscoreOpportunitiesFixture,
+  dailyClosingFixtures,
+  zscoreOpportunitiesFixtures,
 } from './fixtures'
 
 export const handlers = [
@@ -31,6 +31,33 @@ export const handlers = [
 
     return HttpResponse.json(payload)
   }),
-  http.get('/api/analytics/zscore-opportunities', () => HttpResponse.json(zscoreOpportunitiesFixture)),
-  http.get('/api/analytics/daily-closing', () => HttpResponse.json(dailyClosingFixture)),
+  http.get('/api/analytics/zscore-opportunities', ({ request }) => {
+    const url = new URL(request.url)
+    const symbol = url.searchParams.get('symbol')?.toUpperCase() ?? 'NUCO'
+    const tradingDate = url.searchParams.get('trading_date') ?? '2026-08-21'
+    const payload = zscoreOpportunitiesFixtures[`${symbol}:${tradingDate}`]
+
+    if (!payload) {
+      return HttpResponse.json({
+        status: 'ok',
+        result: { symbol, trading_date: tradingDate, record_count: 0, records: [] },
+      })
+    }
+
+    return HttpResponse.json(payload)
+  }),
+  http.get('/api/analytics/daily-closing', ({ request }) => {
+    const url = new URL(request.url)
+    const symbol = url.searchParams.get('symbol')?.toUpperCase() ?? 'NUCO'
+    const payload = dailyClosingFixtures[symbol]
+
+    if (!payload) {
+      return HttpResponse.json({
+        status: 'ok',
+        result: { symbol, trading_date: null, record_count: 0, records: [] },
+      })
+    }
+
+    return HttpResponse.json(payload)
+  }),
 ]

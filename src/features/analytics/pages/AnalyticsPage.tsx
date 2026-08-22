@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DataTable } from '../../../shared/ui/DataTable'
+import { readAnalyticsSymbolOrder, writeAnalyticsSymbolOrder } from '../../../shared/config/storage'
 import { StatusState } from '../../../shared/ui/StatusState'
 import { Tabs } from '../../../shared/ui/Tabs'
 import { AnalyticsFilters, AnalyticsHero } from '../components/AnalyticsHero'
+import { DailyClosingPanel } from '../components/DailyClosingPanel'
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
-import { ManualDataPanel } from '../components/ManualDataPanel'
+import { HistoricStatsPanel } from '../components/HistoricStatsPanel'
 import { OverviewPanel } from '../components/OverviewPanel'
-import { useAnalyticsCatalog, useAnalyticsSnapshots, useDailyClosingSnapshots, useZscoreOpportunities } from '../hooks/useAnalytics'
-import { normalizeRows } from '../lib/formatters'
+import { ZscoreOpportunityPanel } from '../components/ZscoreOpportunityPanel'
+import { useAnalyticsCatalog, useAnalyticsSnapshots, useDailyClosingSnapshots, useZscoreOpportunityWindows } from '../hooks/useAnalytics'
+import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
+import { MarketTape } from '../../market-tape/components/MarketTape'
 
-const topTabs = ['Overview', 'Z-Score Opportunities', 'Daily Close', 'Diagnostics'] as const
+const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
 
 function toIsoBoundaries(values: string[]) {
   const epochValues = values
@@ -29,24 +32,63 @@ function toIsoBoundaries(values: string[]) {
   }
 }
 
+function getErrorMessage(error: unknown, fallback = 'Unknown error') {
+  return error instanceof Error ? error.message : fallback
+}
+
 export function AnalyticsPage() {
   const catalogQuery = useAnalyticsCatalog()
   const symbols = catalogQuery.data?.result.symbols ?? []
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
-  const effectiveSelectedSymbols = selectedSymbols.length > 0 ? selectedSymbols : symbols
+  const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
+  const effectiveSelectedSymbols =
+    selectedSymbols.length > 0
+      ? symbolOrder.filter((symbol) => selectedSymbols.includes(symbol))
+      : symbolOrder.length > 0
+        ? symbolOrder
+        : symbols
   const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>('Overview')
-  const [zscoreDateInput, setZscoreDateInput] = useState<string>(new Date().toISOString().slice(0, 10))
-  const activeSymbol = effectiveSelectedSymbols[0] ?? ''
+  const zscoreTradingDate = catalogQuery.data?.result.trading_date ?? null
 
   const snapshotsQuery = useAnalyticsSnapshots(effectiveSelectedSymbols)
-  const zscoreQuery = useZscoreOpportunities(activeSymbol, zscoreDateInput)
-  const dailyClosingQuery = useDailyClosingSnapshots(activeSymbol)
+  const zscoreQuery = useZscoreOpportunityWindows(effectiveSelectedSymbols, zscoreTradingDate)
+  const dailyClosingQuery = useDailyClosingSnapshots(effectiveSelectedSymbols)
+
+  useEffect(() => {
+    if (symbolOrder.length === 0 && symbols.length > 0) {
+      setSymbolOrder(symbols)
+    }
+  }, [symbolOrder.length, symbols])
 
   useEffect(() => {
     if (selectedSymbols.length === 0 && symbols.length > 0) {
       setSelectedSymbols(symbols)
     }
   }, [selectedSymbols.length, symbols])
+
+  useEffect(() => {
+    if (symbols.length === 0) {
+      return
+    }
+
+    setSymbolOrder((currentOrder) => {
+      const knownSymbols = currentOrder.filter((symbol) => symbols.includes(symbol))
+      const newSymbols = symbols.filter((symbol) => !knownSymbols.includes(symbol))
+      const nextOrder = [...knownSymbols, ...newSymbols]
+
+      return nextOrder.length === currentOrder.length && nextOrder.every((symbol, index) => symbol === currentOrder[index])
+        ? currentOrder
+        : nextOrder
+    })
+  }, [symbols])
+
+  useEffect(() => {
+    if (symbolOrder.length === 0) {
+      return
+    }
+
+    writeAnalyticsSymbolOrder(symbolOrder)
+  }, [symbolOrder])
 
   const summary = useMemo(() => {
     const timestamps = snapshotsQuery.results
@@ -61,32 +103,169 @@ export function AnalyticsPage() {
     }
   }, [snapshotsQuery.results])
 
+  const latestBySymbol = useMemo(
+    () =>
+      Object.fromEntries(
+        snapshotsQuery.results.map((result) => [result.symbol, result.current_snapshot]),
+      ),
+    [snapshotsQuery.results],
+  )
+
+  const hasCatalogData = symbols.length > 0
+  const hasSnapshotData = snapshotsQuery.results.length > 0
+  const hasZscoreData = zscoreQuery.results.length > 0
+  const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
+
+  const catalogDegraded = catalogQuery.isError && hasCatalogData
+  const snapshotDegraded = snapshotsQuery.isError && hasSnapshotData
+  const zscoreDegraded = zscoreQuery.isError && hasZscoreData
+  const dailyClosingDegraded = dailyClosingQuery.isError && hasDailyClosingData
+  const activeDataStatus = useMemo(() => {
+    if (activeTab === 'Paperwork') {
+      return {
+        label: 'Ready',
+        tone: 'live' as const,
+      }
+    }
+
+    if (catalogQuery.isLoading && !hasCatalogData) {
+      return {
+        label: 'Loading',
+        tone: 'loading' as const,
+      }
+    }
+
+    if (activeTab === 'Overview' || activeTab === 'Benchmark Stats') {
+      if (snapshotsQuery.isLoading && !hasSnapshotData) {
+        return {
+          label: 'Loading',
+          tone: 'loading' as const,
+        }
+      }
+
+      if (snapshotsQuery.isFetching) {
+        return {
+          label: 'Syncing',
+          tone: 'fetching' as const,
+        }
+      }
+
+      if (snapshotDegraded) {
+        return {
+          label: 'Degraded',
+          tone: 'degraded' as const,
+        }
+      }
+    }
+
+    if (activeTab === 'Opportunities') {
+      if (zscoreQuery.isLoading && !hasZscoreData) {
+        return {
+          label: 'Loading',
+          tone: 'loading' as const,
+        }
+      }
+
+      if (zscoreQuery.isFetching) {
+        return {
+          label: 'Syncing',
+          tone: 'fetching' as const,
+        }
+      }
+
+      if (zscoreDegraded) {
+        return {
+          label: 'Degraded',
+          tone: 'degraded' as const,
+        }
+      }
+    }
+
+    if (activeTab === 'Historic') {
+      if (dailyClosingQuery.isLoading && !hasDailyClosingData) {
+        return {
+          label: 'Loading',
+          tone: 'loading' as const,
+        }
+      }
+
+      if (dailyClosingQuery.isFetching) {
+        return {
+          label: 'Syncing',
+          tone: 'fetching' as const,
+        }
+      }
+
+      if (dailyClosingDegraded) {
+        return {
+          label: 'Degraded',
+          tone: 'degraded' as const,
+        }
+      }
+    }
+
+    if (catalogQuery.isFetching) {
+      return {
+        label: 'Syncing',
+        tone: 'fetching' as const,
+      }
+    }
+
+    if (catalogDegraded) {
+      return {
+        label: 'Degraded',
+        tone: 'degraded' as const,
+      }
+    }
+
+    return {
+      label: 'Live',
+      tone: 'live' as const,
+    }
+  }, [
+    activeTab,
+    catalogDegraded,
+    catalogQuery.isLoading,
+    dailyClosingDegraded,
+    dailyClosingQuery.isFetching,
+    dailyClosingQuery.isLoading,
+    hasCatalogData,
+    hasDailyClosingData,
+    hasSnapshotData,
+    hasZscoreData,
+    snapshotDegraded,
+    snapshotsQuery.isFetching,
+    snapshotsQuery.isLoading,
+    zscoreDegraded,
+    zscoreQuery.isFetching,
+    zscoreQuery.isLoading,
+  ])
+
   return (
     <main className="page-shell analytics-workspace">
+      <MarketTape />
+
       <AnalyticsHero
+        dataStatusLabel={activeDataStatus.label}
+        dataStatusTone={activeDataStatus.tone}
         from={summary.from}
-        isFetching={snapshotsQuery.isFetching}
-        lastUpdatedAt={snapshotsQuery.lastUpdatedAt}
-        recordCount={summary.records}
-        symbolCount={summary.symbolCount}
         to={summary.to}
       />
 
       <AnalyticsFilters
+        orderedSymbols={symbolOrder}
+        latestBySymbol={latestBySymbol}
         selectedSymbols={effectiveSelectedSymbols}
         symbols={symbols}
         onSelectedSymbolsChange={setSelectedSymbols}
+        onSymbolOrderChange={setSymbolOrder}
       />
 
-      {catalogQuery.isLoading ? (
-        <StatusState title="Loading Catalog" description="Fetching the available symbols for Analytics." />
-      ) : null}
-
-      {catalogQuery.isError ? (
+      {catalogQuery.isError && !hasCatalogData ? (
         <StatusState
           tone="error"
           title="Catalog Request Failed"
-          description={catalogQuery.error instanceof Error ? catalogQuery.error.message : 'Unknown error'}
+          description={getErrorMessage(catalogQuery.error)}
         />
       ) : null}
 
@@ -94,73 +273,69 @@ export function AnalyticsPage() {
 
       <section className="analytics-stage">
         {activeTab === 'Overview' ? (
-          snapshotsQuery.isError ? (
+          !hasSnapshotData && snapshotsQuery.isError ? (
             <StatusState
               tone="error"
               title="Snapshot Request Failed"
-              description={snapshotsQuery.error instanceof Error ? snapshotsQuery.error.message : 'Unknown error'}
+              description={getErrorMessage(snapshotsQuery.error)}
             />
-          ) : snapshotsQuery.isLoading ? (
-            <StatusState title="Loading Overview" description="Fetching current snapshots and historic stats." />
+          ) : !hasSnapshotData && snapshotsQuery.isLoading ? (
+            null
           ) : (
             <OverviewPanel snapshots={snapshotsQuery.results} />
           )
         ) : null}
 
-        {activeTab === 'Diagnostics' ? (
+        {activeTab === 'User Guide' ? (
           <DiagnosticsPanel />
         ) : null}
 
-        {activeTab === 'Z-Score Opportunities' ? (
-          <ManualDataPanel
-            title="Z-Score Opportunities"
-            subtitle="Single-day symbol query aligned with the audited Streamlit contract."
-            controls={
-              <input
-                className="date-input"
-                type="date"
-                value={zscoreDateInput}
-                onChange={(event) => setZscoreDateInput(event.target.value)}
-              />
-            }
-            body={
-              zscoreQuery.isLoading ? (
-                <StatusState title="Loading Z-Scores" description="Fetching opportunities for the selected date." />
-              ) : zscoreQuery.isError ? (
-                <StatusState
-                  tone="error"
-                  title="Z-Score Request Failed"
-                  description={zscoreQuery.error instanceof Error ? zscoreQuery.error.message : 'Unknown error'}
-                />
-              ) : (zscoreQuery.data?.result.records.length ?? 0) === 0 ? (
-                <StatusState title="No Data" description="No z-score opportunities match the current filters." />
-              ) : (
-                <DataTable rows={normalizeRows(zscoreQuery.data?.result.records ?? [])} />
-              )
-            }
-          />
+        {activeTab === 'Benchmark Stats' ? (
+          !hasSnapshotData && snapshotsQuery.isError ? (
+            <StatusState
+              tone="error"
+              title="Historic Stats Request Failed"
+              description={getErrorMessage(snapshotsQuery.error)}
+            />
+          ) : !hasSnapshotData && snapshotsQuery.isLoading ? (
+            null
+          ) : (
+            <HistoricStatsPanel snapshots={snapshotsQuery.results} />
+          )
         ) : null}
 
-        {activeTab === 'Daily Close' ? (
-          <ManualDataPanel
-            title="Daily Closing Snapshots"
-            subtitle="Realtime daily close history for the active symbol without reloading the core feed."
-            body={
-              dailyClosingQuery.isLoading ? (
-                <StatusState title="Loading Daily Closes" description="Fetching the daily series for the active symbol." />
-              ) : dailyClosingQuery.isError ? (
-                <StatusState
-                  tone="error"
-                  title="Daily Close Request Failed"
-                  description={dailyClosingQuery.error instanceof Error ? dailyClosingQuery.error.message : 'Unknown error'}
-                />
-              ) : (dailyClosingQuery.data?.result.records.length ?? 0) === 0 ? (
-                <StatusState title="No Data" description="No daily closing snapshots are available for the active symbol." />
-              ) : (
-                <DataTable rows={normalizeRows(dailyClosingQuery.data?.result.records ?? [])} />
-              )
-            }
-          />
+        {activeTab === 'Opportunities' ? (
+          !hasZscoreData && zscoreQuery.isLoading ? (
+            null
+          ) : !hasZscoreData && zscoreQuery.isError ? (
+            <StatusState
+              tone="error"
+              title="Z-Score Request Failed"
+              description={getErrorMessage(zscoreQuery.error)}
+            />
+          ) : (
+            <ZscoreOpportunityPanel windows={zscoreQuery.results} />
+          )
+        ) : null}
+
+        {activeTab === 'Historic' ? (
+          !hasDailyClosingData && dailyClosingQuery.isLoading ? (
+            null
+          ) : !hasDailyClosingData && dailyClosingQuery.isError ? (
+            <StatusState
+              tone="error"
+              title="Daily Close Request Failed"
+              description={getErrorMessage(dailyClosingQuery.error)}
+            />
+          ) : dailyClosingQuery.results.length === 0 || dailyClosingQuery.results.every((window) => window.records.length === 0) ? (
+            <StatusState title="No Data" description="No daily closing snapshots are available for the selected symbols." />
+          ) : (
+            <DailyClosingPanel windows={dailyClosingQuery.results} />
+          )
+        ) : null}
+
+        {activeTab === 'Paperwork' ? (
+          <PaperworkPanel symbols={effectiveSelectedSymbols} />
         ) : null}
       </section>
     </main>

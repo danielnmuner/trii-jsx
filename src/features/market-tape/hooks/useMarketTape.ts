@@ -5,6 +5,7 @@ import { fetchMarketTape, type MarketTapeSnapshot } from '../api/client'
 import { MARKET_TAPE_CACHE_TTL_MS } from '../lib/instruments'
 
 const MARKET_TAPE_STORAGE_KEY = 'trii.market-tape.snapshot.v1'
+const MARKET_TAPE_REFERENCE_KEY = 'trii.market-tape.reference.v1'
 const MARKET_TAPE_SESSION_KEY = 'trii.market-tape.session-fetched.v1'
 
 type StoredMarketTapeSnapshot = {
@@ -72,12 +73,59 @@ function readMarketTapeSnapshot(): StoredMarketTapeSnapshot | null {
   }
 }
 
+function readStoredSnapshot(key: string): StoredMarketTapeSnapshot | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(key)
+    if (!rawValue) {
+      return null
+    }
+
+    const parsedValue: unknown = JSON.parse(rawValue)
+    if (!parsedValue || typeof parsedValue !== 'object') {
+      return null
+    }
+
+    const candidate = parsedValue as Record<string, unknown>
+    const updatedAt = typeof candidate.updatedAt === 'number' ? candidate.updatedAt : NaN
+    const snapshot = candidate.snapshot
+
+    if (!Number.isFinite(updatedAt) || !snapshot || typeof snapshot !== 'object') {
+      return null
+    }
+
+    const parsedSnapshot = snapshot as Record<string, unknown>
+    if (
+      typeof parsedSnapshot.fetchedAt !== 'string' ||
+      !Array.isArray(parsedSnapshot.quotes) ||
+      !parsedSnapshot.quotes.every(isValidQuote)
+    ) {
+      return null
+    }
+
+    return {
+      updatedAt,
+      snapshot: parsedSnapshot as unknown as MarketTapeSnapshot,
+    }
+  } catch {
+    return null
+  }
+}
+
 function writeMarketTapeSnapshot(snapshot: MarketTapeSnapshot) {
   if (typeof window === 'undefined') {
     return
   }
 
   try {
+    const currentStored = readStoredSnapshot(MARKET_TAPE_STORAGE_KEY)
+    if (currentStored && getBogotaDateKey(currentStored.snapshot.fetchedAt) !== getBogotaDateKey(snapshot.fetchedAt)) {
+      window.localStorage.setItem(MARKET_TAPE_REFERENCE_KEY, JSON.stringify(currentStored))
+    }
+
     const payload: StoredMarketTapeSnapshot = {
       updatedAt: Date.now(),
       snapshot,
@@ -87,6 +135,10 @@ function writeMarketTapeSnapshot(snapshot: MarketTapeSnapshot) {
   } catch {
     // Ignore storage failures so the desk stays usable in restricted browsers.
   }
+}
+
+function readMarketTapeReferenceSnapshot() {
+  return readStoredSnapshot(MARKET_TAPE_REFERENCE_KEY)
 }
 
 function hasMarketTapeSessionFetch() {
@@ -115,6 +167,7 @@ function markMarketTapeSessionFetch() {
 
 export function useMarketTape() {
   const cachedSnapshot = useMemo(() => readMarketTapeSnapshot(), [])
+  const referenceSnapshot = useMemo(() => readMarketTapeReferenceSnapshot(), [])
   const sessionFetched = useMemo(() => hasMarketTapeSessionFetch(), [])
   const canFetchMarketTape = !import.meta.env.DEV || Boolean(env.alphaVantageApiKey)
 
@@ -137,21 +190,27 @@ export function useMarketTape() {
       return cachedSnapshot?.snapshot
     }
 
-    if (!cachedSnapshot?.snapshot || cachedSnapshot.snapshot.fetchedAt === query.data.fetchedAt) {
+    const comparisonSnapshot =
+      referenceSnapshot?.snapshot ??
+      (cachedSnapshot?.snapshot && cachedSnapshot.snapshot.fetchedAt !== query.data.fetchedAt
+        ? cachedSnapshot.snapshot
+        : null)
+
+    if (!comparisonSnapshot) {
       return query.data
     }
 
-    const cachedQuotes = new Map(cachedSnapshot.snapshot.quotes.map((quote) => [quote.id, quote]))
+    const comparisonQuotes = new Map(comparisonSnapshot.quotes.map((quote) => [quote.id, quote]))
     return {
       ...query.data,
       quotes: query.data.quotes.map((quote) => {
-        const cachedQuote = cachedQuotes.get(quote.id)
+        const comparisonQuote = comparisonQuotes.get(quote.id)
         const hasLiveDelta = quote.previousPrice !== quote.price || quote.delta !== 0 || quote.deltaPercent !== 0
-        if (!cachedQuote || hasLiveDelta) {
+        if (!comparisonQuote || hasLiveDelta) {
           return quote
         }
 
-        const previousPrice = cachedQuote.price
+        const previousPrice = comparisonQuote.price
         const delta = quote.price - previousPrice
         return {
           ...quote,
@@ -161,7 +220,7 @@ export function useMarketTape() {
         }
       }),
     }
-  }, [cachedSnapshot?.snapshot, query.data])
+  }, [cachedSnapshot?.snapshot, query.data, referenceSnapshot?.snapshot])
 
   useEffect(() => {
     if (resolvedData) {
@@ -178,4 +237,21 @@ export function useMarketTape() {
     data: resolvedData,
     hasConfiguredKey: Boolean(env.alphaVantageApiKey),
   }
+}
+
+function getBogotaDateKey(value: string) {
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return value.slice(0, 10)
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(parsedDate)
+
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}`
 }

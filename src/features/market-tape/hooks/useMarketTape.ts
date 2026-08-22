@@ -116,11 +116,12 @@ function markMarketTapeSessionFetch() {
 export function useMarketTape() {
   const cachedSnapshot = useMemo(() => readMarketTapeSnapshot(), [])
   const sessionFetched = useMemo(() => hasMarketTapeSessionFetch(), [])
+  const canFetchMarketTape = !import.meta.env.DEV || Boolean(env.alphaVantageApiKey)
 
   const query = useQuery({
     queryKey: ['market-tape'],
     queryFn: () => fetchMarketTape(env.alphaVantageApiKey),
-    enabled: Boolean(env.alphaVantageApiKey) && !sessionFetched,
+    enabled: canFetchMarketTape && !sessionFetched,
     initialData: cachedSnapshot?.snapshot,
     initialDataUpdatedAt: cachedSnapshot?.updatedAt,
     staleTime: MARKET_TAPE_CACHE_TTL_MS,
@@ -131,18 +132,50 @@ export function useMarketTape() {
     refetchOnReconnect: false,
   })
 
+  const resolvedData = useMemo(() => {
+    if (!query.data) {
+      return cachedSnapshot?.snapshot
+    }
+
+    if (!cachedSnapshot?.snapshot || cachedSnapshot.snapshot.fetchedAt === query.data.fetchedAt) {
+      return query.data
+    }
+
+    const cachedQuotes = new Map(cachedSnapshot.snapshot.quotes.map((quote) => [quote.id, quote]))
+    return {
+      ...query.data,
+      quotes: query.data.quotes.map((quote) => {
+        const cachedQuote = cachedQuotes.get(quote.id)
+        const hasLiveDelta = quote.previousPrice !== quote.price || quote.delta !== 0 || quote.deltaPercent !== 0
+        if (!cachedQuote || hasLiveDelta) {
+          return quote
+        }
+
+        const previousPrice = cachedQuote.price
+        const delta = quote.price - previousPrice
+        return {
+          ...quote,
+          previousPrice,
+          delta,
+          deltaPercent: previousPrice === 0 ? 0 : (delta / previousPrice) * 100,
+        }
+      }),
+    }
+  }, [cachedSnapshot?.snapshot, query.data])
+
   useEffect(() => {
-    if (query.data) {
-      writeMarketTapeSnapshot(query.data)
+    if (resolvedData) {
+      writeMarketTapeSnapshot(resolvedData)
     }
 
     if (query.status === 'success') {
       markMarketTapeSessionFetch()
     }
-  }, [query.data, query.status])
+  }, [query.status, resolvedData])
 
   return {
     ...query,
+    data: resolvedData,
     hasConfiguredKey: Boolean(env.alphaVantageApiKey),
   }
 }

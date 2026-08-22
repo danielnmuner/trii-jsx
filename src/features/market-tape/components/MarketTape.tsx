@@ -49,7 +49,18 @@ export function MarketTape() {
   )
 
   if (quotes.length === 0 && !tapeQuery.isLoading) {
-    return null
+    return (
+      <section className="market-tape" aria-label="Macro market tape">
+        <div className="market-tape__track market-tape__track--fallback">
+          <div className="market-tape__fallback">
+            <span className="market-tape__fallbackLabel">Macro tape unavailable</span>
+            <span className="market-tape__fallbackText">
+              Waiting for Alpha Vantage cache to recover.
+            </span>
+          </div>
+        </div>
+      </section>
+    )
   }
 
   return (

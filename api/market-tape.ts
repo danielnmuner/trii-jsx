@@ -1,3 +1,9 @@
+declare const process:
+  | {
+      env?: Record<string, string | undefined>
+    }
+  | undefined
+
 type MarketTapeAssetClass = 'fx' | 'metals'
 
 type MarketTapeQuote = {
@@ -43,28 +49,9 @@ type FxRealtimeResponse = {
   ['Error Message']?: string
 }
 
-type FxHistoryResponse = {
-  ['Time Series FX (Daily)']?: Record<string, {
-    ['4. close']?: string
-  }>
-  Information?: string
-  Note?: string
-  ['Error Message']?: string
-}
-
 type CommoditySpotResponse = {
   timestamp?: string
   price?: string
-  Information?: string
-  Note?: string
-  ['Error Message']?: string
-}
-
-type CommodityHistoryResponse = {
-  data?: Array<{
-    date?: string
-    price?: string
-  }>
   Information?: string
   Note?: string
   ['Error Message']?: string
@@ -113,115 +100,60 @@ function assertProviderPayload(payload: { Information?: string; Note?: string; [
 }
 
 async function fetchFxQuote(instrument: Extract<MarketTapeInstrument, { kind: 'fx' }>, apiKey: string): Promise<MarketTapeQuote> {
-  const [realtimePayload, historyPayload] = await Promise.all([
-    fetchAlphaVantage<FxRealtimeResponse>(
-      new URLSearchParams({
-        function: 'CURRENCY_EXCHANGE_RATE',
-        from_currency: instrument.fromSymbol,
-        to_currency: instrument.toSymbol,
-      }),
-      apiKey,
-    ),
-    fetchAlphaVantage<FxHistoryResponse>(
-      new URLSearchParams({
-        function: 'FX_DAILY',
-        from_symbol: instrument.fromSymbol,
-        to_symbol: instrument.toSymbol,
-        outputsize: 'compact',
-      }),
-      apiKey,
-    ),
-  ])
-
+  const realtimePayload = await fetchAlphaVantage<FxRealtimeResponse>(
+    new URLSearchParams({
+      function: 'CURRENCY_EXCHANGE_RATE',
+      from_currency: instrument.fromSymbol,
+      to_currency: instrument.toSymbol,
+    }),
+    apiKey,
+  )
   assertProviderPayload(realtimePayload)
-  assertProviderPayload(historyPayload)
 
   const realtime = realtimePayload['Realtime Currency Exchange Rate']
   const currentPrice = Number(realtime?.['5. Exchange Rate'])
   const refreshedAt = realtime?.['6. Last Refreshed']
-  const series = historyPayload['Time Series FX (Daily)']
-  if (!Number.isFinite(currentPrice) || !series) {
+  if (!Number.isFinite(currentPrice)) {
     throw new Error(`No FX data returned for ${instrument.label}.`)
   }
-
-  const orderedDates = Object.keys(series).sort((left, right) => right.localeCompare(left))
-  const numericSeries = orderedDates
-    .map((date) => ({ date, close: Number(series[date]?.['4. close']) }))
-    .filter((entry) => Number.isFinite(entry.close))
-
-  if (numericSeries.length === 0) {
-    throw new Error(`Insufficient FX history returned for ${instrument.label}.`)
-  }
-
-  const refreshedDate = refreshedAt?.slice(0, 10)
-  const previous =
-    refreshedDate && numericSeries[0]?.date === refreshedDate
-      ? numericSeries[1] ?? numericSeries[0]
-      : numericSeries[0]
-
-  const delta = currentPrice - previous.close
 
   return {
     id: instrument.id,
     label: instrument.label,
     assetClass: instrument.assetClass,
     price: currentPrice,
-    previousPrice: previous.close,
-    delta,
-    deltaPercent: previous.close === 0 ? 0 : (delta / previous.close) * 100,
-    asOf: refreshedAt ?? previous.date,
+    previousPrice: currentPrice,
+    delta: 0,
+    deltaPercent: 0,
+    asOf: refreshedAt ?? new Date().toISOString(),
   }
 }
 
 async function fetchCommoditySpotQuote(instrument: Extract<MarketTapeInstrument, { kind: 'commodity-spot' }>, apiKey: string): Promise<MarketTapeQuote> {
-  const [spotPayload, historyPayload] = await Promise.all([
-    fetchAlphaVantage<CommoditySpotResponse>(
-      new URLSearchParams({
-        function: 'GOLD_SILVER_SPOT',
-        symbol: instrument.symbol,
-      }),
-      apiKey,
-    ),
-    fetchAlphaVantage<CommodityHistoryResponse>(
-      new URLSearchParams({
-        function: 'GOLD_SILVER_HISTORY',
-        symbol: instrument.symbol,
-        interval: 'daily',
-      }),
-      apiKey,
-    ),
-  ])
-
+  const spotPayload = await fetchAlphaVantage<CommoditySpotResponse>(
+    new URLSearchParams({
+      function: 'GOLD_SILVER_SPOT',
+      symbol: instrument.symbol,
+    }),
+    apiKey,
+  )
   assertProviderPayload(spotPayload)
-  assertProviderPayload(historyPayload)
 
   const currentPrice = Number(spotPayload.price)
   const refreshedAt = spotPayload.timestamp
-  const numericSeries = (historyPayload.data ?? [])
-    .map((entry) => ({ date: entry.date, value: Number(entry.price) }))
-    .filter((entry): entry is { date: string; value: number } => Boolean(entry.date) && Number.isFinite(entry.value))
-
-  if (!Number.isFinite(currentPrice) || numericSeries.length === 0) {
+  if (!Number.isFinite(currentPrice)) {
     throw new Error(`No commodity spot data returned for ${instrument.label}.`)
   }
-
-  const refreshedDate = refreshedAt?.slice(0, 10)
-  const previous =
-    refreshedDate && numericSeries[0]?.date === refreshedDate
-      ? numericSeries[1] ?? numericSeries[0]
-      : numericSeries[0]
-
-  const delta = currentPrice - previous.value
 
   return {
     id: instrument.id,
     label: instrument.label,
     assetClass: instrument.assetClass,
     price: currentPrice,
-    previousPrice: previous.value,
-    delta,
-    deltaPercent: previous.value === 0 ? 0 : (delta / previous.value) * 100,
-    asOf: refreshedAt ?? previous.date,
+    previousPrice: currentPrice,
+    delta: 0,
+    deltaPercent: 0,
+    asOf: refreshedAt ?? new Date().toISOString(),
   }
 }
 
@@ -263,7 +195,7 @@ export default async function handler(_request: unknown, response: {
   status: (code: number) => { json: (body: unknown) => void }
   setHeader: (name: string, value: string) => void
 }) {
-  const apiKey = process.env.ALPHA_VANTAGE_API_KEY || process.env.VITE_ALPHA_VANTAGE_API_KEY
+  const apiKey = process?.env?.ALPHA_VANTAGE_API_KEY || process?.env?.VITE_ALPHA_VANTAGE_API_KEY
   if (!apiKey) {
     response.status(500).json({ message: 'Missing ALPHA_VANTAGE_API_KEY.' })
     return

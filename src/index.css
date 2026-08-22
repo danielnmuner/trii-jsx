@@ -124,6 +124,43 @@ button {
     rgba(5, 8, 11, 0.96);
 }
 
+.market-tape__track--fallback {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+}
+
+.market-tape__fallback {
+  width: 100%;
+  min-width: 0;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.market-tape__fallbackLabel,
+.market-tape__fallbackText {
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.market-tape__fallbackLabel {
+  color: rgba(139, 221, 255, 0.92);
+  font-size: 0.52rem;
+  letter-spacing: 0.13em;
+}
+
+.market-tape__fallbackText {
+  color: rgba(244, 246, 248, 0.38);
+  font-size: 0.5rem;
+  letter-spacing: 0.11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .market-tape__item {
   min-width: 0;
   padding: 6px 14px 7px;

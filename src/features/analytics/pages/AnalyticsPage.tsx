@@ -154,7 +154,7 @@ export function AnalyticsPage() {
 
   const hasCatalogData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
-  const hasZscoreData = zscoreQuery.results.length > 0
+  const hasZscoreData = zscoreQuery.results.some((window) => window.records.length > 0)
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
 
   const catalogDegraded = catalogQuery.isError && hasCatalogData
@@ -356,6 +356,8 @@ export function AnalyticsPage() {
               title="Z-Score Request Failed"
               description={getErrorMessage(zscoreQuery.error)}
             />
+          ) : !hasZscoreData ? (
+            <StatusState title="No Data" description="No opportunity records are available in the active window for the selected symbols." />
           ) : (
             <ZscoreOpportunityPanel windows={zscoreQuery.results} />
           )

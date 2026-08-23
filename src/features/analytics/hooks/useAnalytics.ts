@@ -167,15 +167,7 @@ function mergeZscoreWindowRecords(currentRecords: ZscoreOpportunityRecord[], pre
     (left, right) => new Date(left.captured_at).getTime() - new Date(right.captured_at).getTime(),
   )
 
-  if (sorted.length === 0) {
-    return []
-  }
-
-  const windowStart = Date.now() - 48 * 60 * 60 * 1000
-  return sorted.filter((record) => {
-    const capturedAt = new Date(record.captured_at).getTime()
-    return !Number.isNaN(capturedAt) && capturedAt >= windowStart
-  })
+  return sorted
 }
 
 function toPreviousDate(value: string) {

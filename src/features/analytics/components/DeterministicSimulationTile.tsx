@@ -13,20 +13,23 @@ type PriceScenario = {
   deltaPct: number
 }
 
-type TableScenario = {
+type SimulationScenario = {
   targetProfit: number
   quantity: number
+  askPrice: number
   buyTotal: number
-  sellNet: number
+  sellTotal: number
   commissionCost: number
-  buyOutOfRange: boolean
+  totalResult: number
+  isFeasible: boolean
 }
 
-type LossScenario = {
-  lossTarget: number
-  triggerPrice: number
-  deltaValue: number
-  deltaPct: number
+type LossReviewScenario = {
+  quantity: number
+  levels: Array<{
+    lossTarget: number
+    askPrice: number
+  }>
 }
 
 type ChartGeometry = {
@@ -42,11 +45,20 @@ type LossOverlay = {
   pointKeys: Set<string>
 }
 
-const MIN_INVESTMENT = 5_000_000
-const MAX_INVESTMENT = 15_000_000
+type ChartSummary = {
+  primary: string
+  secondary: string
+  tertiary?: string
+}
+
 const PROFIT_TARGETS = [100_000, 200_000, 300_000] as const
-const LOSS_TARGETS = [50_000, 100_000, 150_000] as const
-const POINT_COUNT = 8
+const POINT_COUNT = 16
+const MAX_QUANTITY_SEARCH = 2_000_000
+const ALERT_AMOUNT_THRESHOLD = 15_000_000
+const MIN_INVESTMENT_AMOUNT = 5_000_000
+const INVESTMENT_CAPS = [5_000_000, 10_000_000, 15_000_000] as const
+const STOP_LOSS_TARGETS = [50_000, 100_000, 150_000, 200_000] as const
+const TRII_PRO_VARIABLE_RATE = 0.0014875
 const CHART_WIDTH = 420
 const CHART_HEIGHT = 110
 const CHART_PADDING = { top: 22, right: 28, bottom: 18, left: 24 }
@@ -63,68 +75,61 @@ export function DeterministicSimulationTile({ snapshot }: DeterministicSimulatio
       Math.max(resolveRoundedPrice(snapshot.microprice), resolveRoundedPrice(snapshot.best_bid_price)),
     [snapshot.best_bid_price, snapshot.microprice],
   )
-  const defaultAskPrice = useMemo(() => {
-    const bestAskPrice = resolveRoundedPrice(snapshot.best_ask_price)
-    return bestAskPrice || resolveRoundedPrice(snapshot.microprice)
-  }, [snapshot.best_ask_price, snapshot.microprice])
-
   const defaultBidIndex = useMemo(() => getDefaultIndex(bidScenarios, defaultBidPrice), [bidScenarios, defaultBidPrice])
-  const defaultAskIndex = useMemo(() => getDefaultIndex(askScenarios, defaultAskPrice), [askScenarios, defaultAskPrice])
 
   const [activeBidIndex, setActiveBidIndex] = useState(defaultBidIndex)
-  const [activeAskIndex, setActiveAskIndex] = useState(defaultAskIndex)
+  const [hoveredAskIndex, setHoveredAskIndex] = useState<number | null>(null)
   const [activeTargetProfit, setActiveTargetProfit] = useState<(typeof PROFIT_TARGETS)[number]>(PROFIT_TARGETS[0])
+  const [activeInvestmentCap, setActiveInvestmentCap] = useState<(typeof INVESTMENT_CAPS)[number]>(INVESTMENT_CAPS[2])
 
   useEffect(() => {
     setActiveBidIndex(defaultBidIndex)
   }, [defaultBidIndex, snapshot.symbol_captured_at, snapshot.captured_at, snapshot.best_bid_price, snapshot.microprice])
 
-  useEffect(() => {
-    setActiveAskIndex(defaultAskIndex)
-  }, [defaultAskIndex, snapshot.symbol_captured_at, snapshot.captured_at, snapshot.best_ask_price, snapshot.microprice, snapshot.high_price])
-
   const safeBidIndex = Math.min(activeBidIndex, Math.max(0, bidScenarios.length - 1))
-  const safeAskIndex = Math.min(activeAskIndex, Math.max(0, askScenarios.length - 1))
   const activeBid = bidScenarios[safeBidIndex]
-  const activeAsk = askScenarios[safeAskIndex]
 
   const bidChart = buildChartGeometry(bidScenarios)
   const askChart = buildChartGeometry(askScenarios)
   const activeBidPoint = bidChart.points[safeBidIndex]
-  const activeAskPoint = askChart.points[safeAskIndex]
 
-  const tableScenarios = useMemo(
+  const optimizedScenarios = useMemo(
     () =>
       PROFIT_TARGETS.map((targetProfit) =>
-        buildTableScenario({
+        solveOptimizedTargetScenario({
           bidPrice: activeBid?.price ?? 0,
-          askPrice: activeAsk?.price ?? 0,
           targetProfit,
+          askMin: resolveAskMinimum(snapshot),
+          askMax: resolveAskMaximum(snapshot),
+          maxInvestmentAmount: activeInvestmentCap,
         }),
-      ),
-    [activeAsk?.price, activeBid?.price],
+      ).filter((scenario): scenario is SimulationScenario => scenario !== null),
+    [activeBid?.price, activeInvestmentCap, snapshot.best_bid_price, snapshot.microprice, snapshot.high_price],
   )
 
   const activeTargetScenario =
-    tableScenarios.find((scenario) => scenario.targetProfit === activeTargetProfit) ?? tableScenarios[0]
+    optimizedScenarios.find((scenario) => scenario.targetProfit === activeTargetProfit) ?? optimizedScenarios[0]
 
-  const lossScenarios = useMemo(
+  const lossReviewScenario = useMemo(
     () =>
-      LOSS_TARGETS.map((lossTarget) =>
-        buildLossScenario({
-          bidPrice: activeBid?.price ?? 0,
-          quantity: activeTargetScenario?.quantity ?? 0,
-          lossTarget,
-        }),
-      ).filter((scenario): scenario is LossScenario => scenario !== null),
+      buildLossReviewScenario({
+        quantity: activeTargetScenario?.quantity ?? 0,
+        bidPrice: activeBid?.price ?? 0,
+      }),
     [activeBid?.price, activeTargetScenario?.quantity],
   )
 
   useEffect(() => {
-    if (!tableScenarios.some((scenario) => scenario.targetProfit === activeTargetProfit)) {
+    if (!optimizedScenarios.some((scenario) => scenario.targetProfit === activeTargetProfit)) {
       setActiveTargetProfit(PROFIT_TARGETS[0])
     }
-  }, [activeTargetProfit, tableScenarios])
+  }, [activeTargetProfit, optimizedScenarios])
+
+  const optimizedAskIndex = getDefaultIndex(askScenarios, activeTargetScenario?.askPrice ?? 0)
+  const safeAskIndex =
+    hoveredAskIndex === null ? optimizedAskIndex : Math.min(hoveredAskIndex, Math.max(0, askScenarios.length - 1))
+  const activeAsk = askScenarios[safeAskIndex]
+  const activeAskPoint = askChart.points[safeAskIndex]
 
   if (!activeBid || !activeAsk || !activeBidPoint || !activeAskPoint || !activeTargetScenario) {
     return null
@@ -133,100 +138,106 @@ export function DeterministicSimulationTile({ snapshot }: DeterministicSimulatio
   return (
     <section className="overview-tape__item overview-tape__item--market overview-tape__item--simulation" aria-label="Deterministic trade simulation">
       <div className="overview-sim">
-        <div className="overview-sim__charts">
-          <PriceChart
-            title="Bid"
-            axisStart={formatInteger(bidScenarios[0]?.price)}
-            axisEnd={formatInteger(bidScenarios[bidScenarios.length - 1]?.price)}
-            geometry={bidChart}
-            activeIndex={safeBidIndex}
-            activePoint={activeBidPoint}
-            activeScenario={activeBid}
-            gradientId={bidGradientId}
-            onSelect={setActiveBidIndex}
-            referencePrice={resolveRoundedPrice(snapshot.last_price)}
-            headerControls={
-              <div className="overview-sim__targetSwitch" role="tablist" aria-label="Simulation target profit">
-                {PROFIT_TARGETS.map((targetProfit) => {
-                  const isActive = targetProfit === activeTargetProfit
-                  return (
-                    <button
-                      key={targetProfit}
-                      type="button"
-                      className={['overview-sim__targetButton', isActive ? 'overview-sim__targetButton--active' : '']
-                        .filter(Boolean)
-                        .join(' ')}
-                      onClick={() => setActiveTargetProfit(targetProfit)}
-                      aria-pressed={isActive}
-                    >
-                      {formatCompactTarget(targetProfit)}
-                    </button>
-                  )
-                })}
-              </div>
-            }
-          />
+        <PriceChart
+          title="Bid"
+          axisStart={formatInteger(bidScenarios[0]?.price)}
+          axisEnd={formatInteger(bidScenarios[bidScenarios.length - 1]?.price)}
+          geometry={bidChart}
+          activeIndex={safeBidIndex}
+          activePoint={activeBidPoint}
+          activeScenario={activeBid}
+          gradientId={bidGradientId}
+          onSelect={setActiveBidIndex}
+          referencePrice={resolveRoundedPrice(snapshot.last_price)}
+          summary={{
+            primary: formatInteger(activeBid.price),
+            secondary: `${formatSignedInteger(activeBid.deltaValue)} (${formatSignedPercent(activeBid.deltaPct)})`,
+          }}
+          headerControls={
+            <div className="overview-sim__targetSwitch" role="tablist" aria-label="Simulation target profit">
+              {PROFIT_TARGETS.map((targetProfit) => {
+                const isActive = targetProfit === activeTargetProfit
+                return (
+                  <button
+                    key={targetProfit}
+                    type="button"
+                    className={['overview-sim__targetButton', isActive ? 'overview-sim__targetButton--active' : '']
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={() => setActiveTargetProfit(targetProfit)}
+                    aria-pressed={isActive}
+                  >
+                    {formatCompactTarget(targetProfit)}
+                  </button>
+                )
+              })}
+            </div>
+          }
+        />
 
-          <div className="overview-sim__chartDivider" aria-hidden="true" />
+        <div className="overview-sim__sectionDivider" aria-hidden="true" />
 
-          <PriceChart
-            title="Ask"
-            axisStart={formatInteger(askScenarios[0]?.price)}
-            axisEnd={formatInteger(askScenarios[askScenarios.length - 1]?.price)}
-            geometry={askChart}
-            activeIndex={safeAskIndex}
-            activePoint={activeAskPoint}
-            activeScenario={activeAsk}
-            gradientId={askGradientId}
-            onSelect={setActiveAskIndex}
-            referencePrice={resolveRoundedPrice(snapshot.last_price)}
-            lossCutoffPrice={activeBid.price}
-          />
+        <PriceChart
+          title="Ask"
+          axisStart={formatInteger(askScenarios[0]?.price)}
+          axisEnd={formatInteger(askScenarios[askScenarios.length - 1]?.price)}
+          geometry={askChart}
+          activeIndex={safeAskIndex}
+          activePoint={activeAskPoint}
+          activeScenario={activeAsk}
+          gradientId={askGradientId}
+          onSelect={setHoveredAskIndex}
+          onLeave={() => setHoveredAskIndex(null)}
+          clickSelectable={false}
+          referencePrice={resolveRoundedPrice(snapshot.last_price)}
+          optimizedAskPrice={activeTargetScenario.askPrice}
+          lossCutoffPrice={resolveChartAskLossCutoff(activeBid.price)}
+          summary={{
+            primary: `${formatInteger(activeTargetScenario.askPrice)} (${formatInteger(activeTargetScenario.quantity)})`,
+            secondary: `${formatSignedInteger(activeTargetScenario.askPrice - activeBid.price)} (${formatSignedPercent(
+              activeBid.price > 0 ? ((activeTargetScenario.askPrice - activeBid.price) / activeBid.price) * 100 : 0,
+            )})`,
+          }}
+          headerControls={
+            <div className="overview-sim__targetSwitch" role="tablist" aria-label="Simulation max buy">
+              {INVESTMENT_CAPS.map((investmentCap) => {
+                const isActive = investmentCap === activeInvestmentCap
+                return (
+                  <button
+                    key={investmentCap}
+                    type="button"
+                    className={['overview-sim__targetButton', isActive ? 'overview-sim__targetButton--active' : '']
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={() => setActiveInvestmentCap(investmentCap)}
+                    aria-pressed={isActive}
+                  >
+                    {formatCompactAmount(investmentCap)}
+                  </button>
+                )
+              })}
+            </div>
+          }
+        />
+
+        <div className="overview-sim__sectionDivider" aria-hidden="true" />
+
+        <div className="overview-sim__tableCard">
+          <table className="overview-sim__table overview-sim__table--detail">
+            <tbody>
+              {renderScenarioRows(activeTargetScenario)}
+            </tbody>
+          </table>
         </div>
 
-        <div className="overview-sim__tableDivider" aria-hidden="true" />
+        <div className="overview-sim__sectionDivider" aria-hidden="true" />
 
-        <div className="overview-sim__tableShell">
-          <div className="overview-sim__tables">
-            <table className="overview-sim__table overview-sim__table--detail">
-              <tbody>
-                <SimulationDetailRow
-                  label="Qty"
-                  value={formatInteger(activeTargetScenario.quantity)}
-                  tone={activeTargetScenario.buyOutOfRange ? 'negative' : 'positive'}
-                />
-                <SimulationDetailRow
-                  label="Buy"
-                  value={formatInteger(activeTargetScenario.buyTotal)}
-                  tone={activeTargetScenario.buyOutOfRange ? 'negative' : 'neutral'}
-                />
-                <SimulationDetailRow
-                  label="Sell"
-                  value={formatInteger(activeTargetScenario.sellNet)}
-                  tone="neutral"
-                />
-                <SimulationDetailRow
-                  label="Comm"
-                  value={formatInteger(activeTargetScenario.commissionCost)}
-                  tone="neutral"
-                />
-              </tbody>
-            </table>
-
-            <table className="overview-sim__table overview-sim__table--detail">
-              <tbody>
-                {lossScenarios.map((scenario) => (
-                  <SimulationDetailRow
-                    key={scenario.lossTarget}
-                    label={formatCompactLossTarget(scenario.lossTarget)}
-                    value={formatInteger(scenario.triggerPrice)}
-                    tone="negative"
-                    caption={`${formatSignedInteger(scenario.deltaValue)} | ${formatSignedPercent(scenario.deltaPct)}`}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="overview-sim__tableCard">
+          <table className="overview-sim__table overview-sim__table--detail">
+            <tbody>
+              {renderLossReviewRows(lossReviewScenario)}
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -243,9 +254,13 @@ function PriceChart({
   activeScenario,
   gradientId,
   onSelect,
+  onLeave,
   headerControls,
   referencePrice,
+  optimizedAskPrice,
   lossCutoffPrice,
+  summary,
+  clickSelectable = true,
 }: {
   title: string
   axisStart: string
@@ -256,23 +271,29 @@ function PriceChart({
   activeScenario: PriceScenario
   gradientId: string
   onSelect: (index: number) => void
+  onLeave?: () => void
   headerControls?: ReactNode
   referencePrice?: number
+  optimizedAskPrice?: number
   lossCutoffPrice?: number
+  summary: ChartSummary
+  clickSelectable?: boolean
 }) {
   const referenceX = useMemo(() => resolveReferenceX(geometry.points, referencePrice), [geometry.points, referencePrice])
+  const optimizedAskX = useMemo(() => resolveReferenceX(geometry.points, optimizedAskPrice), [geometry.points, optimizedAskPrice])
   const lossOverlay = useMemo(() => buildLossOverlay(geometry.points, lossCutoffPrice), [geometry.points, lossCutoffPrice])
 
   return (
-    <div className="overview-sim__chartCard">
+    <div className="overview-sim__chartCard" onMouseLeave={onLeave}>
       <div className="overview-sim__chartMeta">
         <div className="overview-sim__chartLead">
           <span className="overview-sim__chartLabel">{title}</span>
           {headerControls}
         </div>
         <div className="overview-sim__activeMeta">
-          <strong className="overview-sim__activeMetaPrice">{formatInteger(activeScenario.price)}</strong>
-          <span className="overview-sim__activeMetaDelta">{`${formatSignedInteger(activeScenario.deltaValue)} (${formatSignedPercent(activeScenario.deltaPct)})`}</span>
+          <strong className="overview-sim__activeMetaPrice">{summary.primary}</strong>
+          <span className="overview-sim__activeMetaDelta">{summary.secondary}</span>
+          {summary.tertiary ? <span className="overview-sim__activeMetaDelta">{summary.tertiary}</span> : null}
         </div>
       </div>
 
@@ -299,6 +320,21 @@ function PriceChart({
             />
             <text className="overview-sim__referenceLabel" x={referenceX} y={CHART_PADDING.top - 6} textAnchor="middle">
               LP
+            </text>
+          </g>
+        ) : null}
+
+        {optimizedAskX !== null ? (
+          <g>
+            <line
+              x1={optimizedAskX}
+              x2={optimizedAskX}
+              y1={CHART_PADDING.top}
+              y2={CHART_HEIGHT - CHART_PADDING.bottom}
+              className="overview-sim__optimizedLine"
+            />
+            <text className="overview-sim__optimizedLabel" x={optimizedAskX} y={CHART_PADDING.top - 6} textAnchor="middle">
+              OPT
             </text>
           </g>
         ) : null}
@@ -337,7 +373,7 @@ function PriceChart({
               aria-label={`${title} ${formatInteger(point.scenario.price)}`}
               onMouseEnter={() => onSelect(index)}
               onFocus={() => onSelect(index)}
-              onClick={() => onSelect(index)}
+              onClick={clickSelectable ? () => onSelect(index) : undefined}
             />
           </g>
         ))}
@@ -401,14 +437,9 @@ function buildBidScenarios(snapshot: SnapshotRecord) {
 }
 
 function buildAskScenarios(snapshot: SnapshotRecord) {
-  const microPrice = resolveRoundedPrice(snapshot.microprice)
   const bestAskPrice = resolveRoundedPrice(snapshot.best_ask_price)
-  const lowAsk = Math.min(
-    ...[bestAskPrice, microPrice, resolveRoundedPrice(snapshot.mid_price), resolveRoundedPrice(snapshot.last_price)].filter(
-      (value) => value > 0,
-    ),
-  )
-  const highAsk = resolveRoundedPrice(snapshot.high_price)
+  const lowAsk = resolveAskMinimum(snapshot)
+  const highAsk = resolveAskMaximum(snapshot)
 
   if (!lowAsk || !highAsk || highAsk < lowAsk) {
     return []
@@ -445,126 +476,220 @@ function buildPriceRange(start: number, end: number, count: number, anchors: num
   return Array.from(values).sort((left, right) => left - right)
 }
 
-function buildTableScenario({
+function solveOptimizedTargetScenario({
   bidPrice,
-  askPrice,
   targetProfit,
+  askMin,
+  askMax,
+  maxInvestmentAmount,
 }: {
   bidPrice: number
-  askPrice: number
   targetProfit: number
-}): TableScenario {
-  if (bidPrice <= 0 || askPrice <= 0) {
-    return {
-      targetProfit,
-      quantity: 0,
-      buyTotal: 0,
-      sellNet: 0,
-      commissionCost: 0,
-      buyOutOfRange: true,
-    }
-  }
-
-  const minimumQuantity = Math.max(1, Math.ceil(MIN_INVESTMENT / bidPrice))
-  const targetQuantity = solveQuantityForTarget({ bidPrice, askPrice, targetProfit })
-  const quantity = Math.max(minimumQuantity, targetQuantity)
-  const buyCost = quantity * bidPrice
-  const sellValue = quantity * askPrice
-  const buyCommission = calculateCommission(buyCost)
-  const sellCommission = calculateCommission(sellValue)
-  const buyTotal = buyCost + buyCommission
-  const sellNet = sellValue - sellCommission
-  const commissionCost = buyCommission + sellCommission
-
-  return {
+  askMin: number
+  askMax: number
+  maxInvestmentAmount: number
+}): SimulationScenario | null {
+  const baseScenario = solveMinimumQuantityBaseScenario({
+    bidPrice,
     targetProfit,
-    quantity,
-    buyTotal,
-    sellNet,
-    commissionCost,
-    buyOutOfRange: buyCost < MIN_INVESTMENT || buyCost > MAX_INVESTMENT,
-  }
-}
+    askMin,
+    askMax,
+  })
 
-function solveQuantityForTarget({
-  bidPrice,
-  askPrice,
-  targetProfit,
-}: {
-  bidPrice: number
-  askPrice: number
-  targetProfit: number
-}) {
-  if (bidPrice <= 0 || askPrice <= bidPrice) {
-    return 1
-  }
-
-  let low = 1
-  let high = 1
-
-  while (computeNetProfit(high, bidPrice, askPrice) < targetProfit && high < 2_000_000) {
-    high *= 2
-  }
-
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2)
-    if (computeNetProfit(mid, bidPrice, askPrice) >= targetProfit) {
-      high = mid
-    } else {
-      low = mid + 1
-    }
-  }
-
-  return Math.max(1, low)
-}
-
-function buildLossScenario({
-  bidPrice,
-  quantity,
-  lossTarget,
-}: {
-  bidPrice: number
-  quantity: number
-  lossTarget: number
-}): LossScenario | null {
-  if (bidPrice <= 0 || quantity <= 0) {
+  if (!baseScenario) {
     return null
   }
 
-  const profitAtBid = computeNetProfit(quantity, bidPrice, bidPrice)
+  return (
+    refineScenarioWithinInvestmentRange({
+      baseScenario,
+      bidPrice,
+      targetProfit,
+      askMin,
+      maxInvestmentAmount,
+    }) ?? baseScenario
+  )
+}
 
-  if (profitAtBid <= -lossTarget) {
-    return {
-      triggerPrice: bidPrice,
-      lossTarget,
-      deltaValue: 0,
-      deltaPct: 0,
-    }
+function solveMinimumQuantityBaseScenario({
+  bidPrice,
+  targetProfit,
+  askMin,
+  askMax,
+}: {
+  bidPrice: number
+  targetProfit: number
+  askMin: number
+  askMax: number
+}): SimulationScenario | null {
+  if (bidPrice <= 0 || askMin <= 0 || askMax <= 0 || askMax < askMin || askMax <= bidPrice) {
+    return null
   }
 
-  let low = 0
-  let high = bidPrice
+  let lowQuantity = 1
+  let highQuantity = 1
 
-  for (let iteration = 0; iteration < 36; iteration += 1) {
-    const midpoint = (low + high) / 2
-    const profit = computeNetProfit(quantity, bidPrice, midpoint)
-    if (profit <= -lossTarget) {
-      low = midpoint
+  while (highQuantity < MAX_QUANTITY_SEARCH && computeNetProfit(highQuantity, bidPrice, askMax) < targetProfit) {
+    highQuantity *= 2
+  }
+
+  if (computeNetProfit(highQuantity, bidPrice, askMax) < targetProfit) {
+    return null
+  }
+
+  while (lowQuantity < highQuantity) {
+    const midpoint = Math.floor((lowQuantity + highQuantity) / 2)
+    if (computeNetProfit(midpoint, bidPrice, askMax) >= targetProfit) {
+      highQuantity = midpoint
     } else {
-      high = midpoint
+      lowQuantity = midpoint + 1
     }
   }
 
-  const triggerPrice = Math.max(1, Math.round(high))
-  const deltaValue = triggerPrice - bidPrice
-  const deltaPct = bidPrice > 0 ? (deltaValue / bidPrice) * 100 : 0
+  const quantity = lowQuantity
+  const askPrice = solveMinimumAsk({
+    quantity,
+    bidPrice,
+    targetProfit,
+    askMin,
+    askMax,
+  })
 
-  return {
-    triggerPrice,
-    lossTarget,
-    deltaValue,
-    deltaPct,
+  if (askPrice === null) {
+    return null
   }
+
+  return buildScenarioTotals({
+    targetProfit,
+    quantity,
+    bidPrice,
+    askPrice,
+    isFeasible: true,
+  })
+}
+
+function refineScenarioWithinInvestmentRange({
+  baseScenario,
+  bidPrice,
+  targetProfit,
+  askMin,
+  maxInvestmentAmount,
+}: {
+  baseScenario: SimulationScenario
+  bidPrice: number
+  targetProfit: number
+  askMin: number
+  maxInvestmentAmount: number
+}): SimulationScenario | null {
+  if (!baseScenario.isFeasible || bidPrice <= 0 || askMin <= 0 || maxInvestmentAmount < MIN_INVESTMENT_AMOUNT) {
+    return null
+  }
+
+  for (let askPrice = askMin; askPrice <= baseScenario.askPrice; askPrice += 1) {
+    const candidate = solveFixedAskTargetScenario({
+      bidPrice,
+      askPrice,
+      targetProfit,
+    })
+
+    if (!candidate.isFeasible) {
+      continue
+    }
+
+    if (candidate.buyTotal < MIN_INVESTMENT_AMOUNT || candidate.buyTotal > maxInvestmentAmount) {
+      continue
+    }
+
+    return candidate
+  }
+
+  return null
+}
+
+function solveMinimumAsk({
+  quantity,
+  bidPrice,
+  targetProfit,
+  askMin,
+  askMax,
+}: {
+  quantity: number
+  bidPrice: number
+  targetProfit: number
+  askMin: number
+  askMax: number
+}) {
+  let low = askMin
+  let high = askMax
+
+  if (computeNetProfit(quantity, bidPrice, high) < targetProfit) {
+    return null
+  }
+
+  while (low < high) {
+    const midpoint = Math.floor((low + high) / 2)
+    if (computeNetProfit(quantity, bidPrice, midpoint) >= targetProfit) {
+      high = midpoint
+    } else {
+      low = midpoint + 1
+    }
+  }
+
+  return low
+}
+
+function solveFixedAskTargetScenario({
+  bidPrice,
+  askPrice,
+  targetProfit,
+}: {
+  bidPrice: number
+  askPrice: number
+  targetProfit: number
+}): SimulationScenario {
+  if (bidPrice <= 0 || askPrice <= 0 || askPrice <= bidPrice) {
+    return buildScenarioTotals({
+      targetProfit,
+      quantity: 0,
+      bidPrice,
+      askPrice,
+      isFeasible: false,
+    })
+  }
+
+  let lowQuantity = 1
+  let highQuantity = 1
+
+  while (highQuantity < MAX_QUANTITY_SEARCH && computeNetProfit(highQuantity, bidPrice, askPrice) < targetProfit) {
+    highQuantity *= 2
+  }
+
+  if (computeNetProfit(highQuantity, bidPrice, askPrice) < targetProfit) {
+    return buildScenarioTotals({
+      targetProfit,
+      quantity: 0,
+      bidPrice,
+      askPrice,
+      isFeasible: false,
+    })
+  }
+
+  while (lowQuantity < highQuantity) {
+    const midpoint = Math.floor((lowQuantity + highQuantity) / 2)
+    if (computeNetProfit(midpoint, bidPrice, askPrice) >= targetProfit) {
+      highQuantity = midpoint
+    } else {
+      lowQuantity = midpoint + 1
+    }
+  }
+
+  return buildScenarioTotals({
+    targetProfit,
+    quantity: lowQuantity,
+    bidPrice,
+    askPrice,
+    isFeasible: true,
+  })
 }
 
 function buildChartGeometry(scenarios: PriceScenario[]): ChartGeometry {
@@ -642,18 +767,120 @@ function calculateCommission(amount: number) {
   }
 
   if (amount <= 5_000_000) {
-    return 14_875
+    return 14_875 * 0.5
   }
 
-  return amount * 0.0025 * 1.19
+  return amount * TRII_PRO_VARIABLE_RATE
 }
 
-function computeNetProfit(quantity: number, buyPrice: number, sellPrice: number) {
-  const buyAmount = quantity * buyPrice
-  const sellAmount = quantity * sellPrice
+function computeNetProfit(quantity: number, bidPrice: number, askPrice: number) {
+  const buyAmount = quantity * bidPrice
   const buyCommission = calculateCommission(buyAmount)
+  const sellAmount = quantity * askPrice
   const sellCommission = calculateCommission(sellAmount)
   return sellAmount - sellCommission - buyAmount - buyCommission
+}
+
+function buildScenarioTotals({
+  targetProfit,
+  quantity,
+  bidPrice,
+  askPrice,
+  isFeasible,
+}: {
+  targetProfit: number
+  quantity: number
+  bidPrice: number
+  askPrice: number
+  isFeasible: boolean
+}): SimulationScenario {
+  if (quantity <= 0) {
+    return {
+      targetProfit,
+      quantity: 0,
+      askPrice,
+      buyTotal: 0,
+      sellTotal: 0,
+      commissionCost: 0,
+      totalResult: Math.min(-1, Math.round(computeNetProfit(1, bidPrice, askPrice))),
+      isFeasible,
+    }
+  }
+
+  const buyTotal = quantity * bidPrice
+  const buyCommission = calculateCommission(buyTotal)
+  const sellTotal = quantity * askPrice
+  const sellCommission = calculateCommission(sellTotal)
+  const commissionCost = buyCommission + sellCommission
+  const totalResult = sellTotal - buyTotal - commissionCost
+
+  return {
+    targetProfit,
+    quantity,
+    askPrice,
+    buyTotal,
+    sellTotal,
+    commissionCost,
+    totalResult,
+    isFeasible,
+  }
+}
+
+function buildLossReviewScenario({
+  quantity,
+  bidPrice,
+}: {
+  quantity: number
+  bidPrice: number
+}): LossReviewScenario {
+  const safeQuantity = Math.max(0, Math.round(quantity))
+
+  return {
+    quantity: safeQuantity,
+    levels: STOP_LOSS_TARGETS.map((lossTarget) => ({
+      lossTarget,
+      askPrice: solveStopLossAskPrice({
+        quantity: safeQuantity,
+        bidPrice,
+        lossTarget,
+      }),
+    })),
+  }
+}
+
+function solveStopLossAskPrice({
+  quantity,
+  bidPrice,
+  lossTarget,
+}: {
+  quantity: number
+  bidPrice: number
+  lossTarget: number
+}) {
+  if (quantity <= 0 || bidPrice <= 0 || lossTarget <= 0) {
+    return 0
+  }
+
+  const targetProfit = -lossTarget
+  const profitAtBid = computeNetProfit(quantity, bidPrice, bidPrice)
+
+  if (profitAtBid <= targetProfit) {
+    return bidPrice
+  }
+
+  let low = 0
+  let high = bidPrice
+
+  while (low < high) {
+    const midpoint = Math.ceil((low + high) / 2)
+    if (computeNetProfit(quantity, bidPrice, midpoint) <= targetProfit) {
+      low = midpoint
+    } else {
+      high = midpoint - 1
+    }
+  }
+
+  return Math.max(0, Math.round(low))
 }
 
 function resolveRoundedPrice(value: number | null | undefined) {
@@ -662,6 +889,36 @@ function resolveRoundedPrice(value: number | null | undefined) {
   }
 
   return Math.max(1, Math.round(value))
+}
+
+function resolveAskMinimum(snapshot: SnapshotRecord) {
+  const candidates = [snapshot.best_bid_price, snapshot.microprice, snapshot.last_price]
+    .map((value) => resolveRoundedPrice(value))
+    .filter((value) => value > 0)
+
+  if (candidates.length === 0) {
+    return 0
+  }
+
+  return Math.min(...candidates)
+}
+
+function resolveAskMaximum(snapshot: SnapshotRecord) {
+  const highPrice = resolveRoundedPrice(snapshot.high_price)
+  if (!highPrice) {
+    return 0
+  }
+
+  return highPrice
+}
+
+function resolveChartAskLossCutoff(bidPrice: number) {
+  if (bidPrice <= 0) {
+    return 0
+  }
+
+  const breakEvenAsk = (bidPrice * (1 + TRII_PRO_VARIABLE_RATE)) / (1 - TRII_PRO_VARIABLE_RATE)
+  return Math.max(bidPrice, Math.ceil(breakEvenAsk))
 }
 
 function getDefaultIndex(scenarios: PriceScenario[], targetPrice: number) {
@@ -781,6 +1038,52 @@ function formatCompactTarget(value: number) {
   return `+${Math.round(value / 1_000)}K`
 }
 
-function formatCompactLossTarget(value: number) {
-  return `-${Math.round(value / 1_000)}K`
+function formatCompactAmount(value: number) {
+  return `${Math.round(value / 1_000_000)}M`
+}
+
+function renderScenarioRows(scenario: SimulationScenario) {
+  const exceedsAlertThreshold = scenario.buyTotal > ALERT_AMOUNT_THRESHOLD
+
+  return [
+    <SimulationDetailRow key="qty" label="Qty" value={formatInteger(scenario.quantity)} tone={scenario.isFeasible ? 'positive' : 'negative'} />,
+    <SimulationDetailRow
+      key="buy"
+      label="Buy"
+      value={formatInteger(scenario.buyTotal)}
+      tone={scenario.buyTotal > ALERT_AMOUNT_THRESHOLD ? 'negative' : 'neutral'}
+    />,
+    <SimulationDetailRow
+      key="sell"
+      label="Sell"
+      value={formatInteger(scenario.sellTotal)}
+      tone={exceedsAlertThreshold ? 'negative' : 'neutral'}
+    />,
+    <SimulationDetailRow
+      key="comm"
+      label="Comm"
+      value={formatInteger(scenario.commissionCost)}
+      tone={exceedsAlertThreshold ? 'negative' : 'neutral'}
+    />,
+    <SimulationDetailRow
+      key="total"
+      label="Total"
+      value={formatInteger(scenario.totalResult)}
+      tone={exceedsAlertThreshold || scenario.totalResult < 0 ? 'negative' : 'positive'}
+    />,
+  ]
+}
+
+function renderLossReviewRows(scenario: LossReviewScenario) {
+  return [
+    <SimulationDetailRow key="qty" label="Qty" value={formatInteger(scenario.quantity)} tone={scenario.quantity > 0 ? 'positive' : 'negative'} />,
+    ...scenario.levels.map((level) => (
+      <SimulationDetailRow
+        key={level.lossTarget}
+        label={`-${Math.round(level.lossTarget / 1_000)}K`}
+        value={formatInteger(level.askPrice)}
+        tone="negative"
+      />
+    )),
+  ]
 }

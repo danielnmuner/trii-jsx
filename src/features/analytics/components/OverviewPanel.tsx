@@ -15,7 +15,6 @@ type OverviewPanelProps = {
 }
 
 type TapeTone = 'positive' | 'negative' | 'neutral'
-type ZTone = 'anomaly' | 'review' | 'normal'
 type BadgeTone = 'fresh' | 'stale'
 
 type TapeItemData = {
@@ -27,12 +26,18 @@ type TapeItemData = {
   badge?: string
   badgeTone?: BadgeTone
   zScore?: string
-  zSignal?: string
-  zTone?: ZTone
   inline?: string
   inlineTone?: TapeTone
   secondaryTone?: TapeTone
-  pairs?: Array<{ label: string; value: string; zScore?: string; zSignal?: string; zTone?: ZTone }>
+  pairs?: Array<{
+    label: string
+    value: string
+    secondary?: string
+    inline?: string
+    inlineTone?: TapeTone
+    secondaryTone?: TapeTone
+    zScore?: string
+  }>
 }
 
 export function OverviewPanel({ snapshots }: OverviewPanelProps) {
@@ -60,6 +65,25 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
         const headerMeta = sampleLabel ? `${freshnessLabel} (${sampleLabel})` : freshnessLabel
 
         const topItems: TapeItemData[] = [
+          buildLastPriceSpreadItem(current, currentStats, marketTone),
+          {
+            key: 'price_range',
+            className: 'overview-tape__item overview-tape__item--paired',
+            pairs: [
+              { label: 'High price', value: formatMetricValue('high_price', current.high_price) },
+              { label: 'Low price', value: formatMetricValue('low_price', current.low_price) },
+            ],
+          },
+          {
+            key: 'best_prices',
+            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--market',
+            badge: isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price) ? 'Stop' : 'Normal',
+            badgeTone: isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price) ? 'stale' : 'fresh',
+            pairs: [
+              { label: 'Best ask', value: formatMetricValue('best_ask_price', current.best_ask_price) },
+              { label: 'Best bid', value: formatMetricValue('best_bid_price', current.best_bid_price) },
+            ],
+          },
           {
             key: 'mid-micro',
             className: 'overview-tape__item overview-tape__item--paired overview-tape__item--microstructure-pair',
@@ -84,41 +108,7 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
               { label: 'Traded value', value: formatMetricValue('traded_value', current.traded_value) },
             ],
           },
-          buildMicrostructureItem('SPREAD BPS', 'spread_bps', current.spread_bps, currentStats.spread_bps),
-          {
-            key: 'price_range',
-            className: 'overview-tape__item overview-tape__item--paired',
-            pairs: [
-              { label: 'High price', value: formatMetricValue('high_price', current.high_price) },
-              { label: 'Low price', value: formatMetricValue('low_price', current.low_price) },
-            ],
-          },
           buildObiPairItem(current, currentStats),
-        ]
-
-        const bottomItems: TapeItemData[] = [
-          {
-            key: 'last_price',
-            className: `overview-tape__item overview-tape__item--${marketTone} overview-tape__item--market-primary`,
-            label: 'Last price',
-            primary: formatMetricValue('last_price', current.last_price),
-            secondary: formatBandDelta('last_price', current.last_price, current.previous_close),
-            inline:
-              current.daily_change_percent === null || current.daily_change_percent === undefined
-                ? undefined
-                : `(${formatPercentFromWhole(current.daily_change_percent)})`,
-            inlineTone: marketTone,
-          },
-          {
-            key: 'best_prices',
-            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--market overview-tape__item--market-primary',
-            badge: isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price) ? 'Stop' : 'Normal',
-            badgeTone: isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price) ? 'stale' : 'fresh',
-            pairs: [
-              { label: 'Best ask', value: formatMetricValue('best_ask_price', current.best_ask_price) },
-              { label: 'Best bid', value: formatMetricValue('best_bid_price', current.best_bid_price) },
-            ],
-          },
         ]
 
         return (
@@ -147,9 +137,6 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
 
             <div className="overview-tape overview-tape--market" role="group" aria-label={`${snapshot.symbol} market tape`}>
               <div className="overview-tape__row overview-tape__row--market">
-                {bottomItems.map((item) => (
-                  <TapeItem key={item.key} item={item} />
-                ))}
                 <DeterministicSimulationTile snapshot={current} />
               </div>
             </div>
@@ -174,15 +161,22 @@ function TapeItem({ item }: { item: TapeItemData }) {
             <span className="overview-tape__pair-label">{pair.label}</span>
             <div className="overview-tape__pair-main-row">
               <strong className="overview-tape__pair-value">{pair.value}</strong>
-              {pair.zScore || pair.zSignal ? (
+              {pair.zScore ? (
                 <div className="overview-tape__pair-zstack">
-                  {pair.zScore ? <span className="overview-tape__zscore">{pair.zScore}</span> : null}
-                  {pair.zSignal ? (
-                    <span className={`overview-tape__zsignal overview-tape__zsignal--${pair.zTone ?? 'normal'}`}>{pair.zSignal}</span>
-                  ) : null}
+                  <span className="overview-tape__zscore">{pair.zScore}</span>
                 </div>
               ) : null}
             </div>
+            {pair.inline ? (
+              <div className={`overview-tape__sub overview-tape__sub--inline overview-tape__sub--${pair.secondaryTone ?? 'neutral'}`}>
+                <span>{pair.secondary ?? 'No prior point'}</span>
+                <span className={`overview-tape__inline-tone overview-tape__inline-tone--${pair.inlineTone ?? 'neutral'}`}>
+                  {pair.inline}
+                </span>
+              </div>
+            ) : pair.secondary ? (
+              <div className={`overview-tape__sub overview-tape__sub--${pair.secondaryTone ?? 'neutral'}`}>{pair.secondary}</div>
+            ) : null}
           </div>
         ))}
       </section>
@@ -200,12 +194,9 @@ function TapeItem({ item }: { item: TapeItemData }) {
 
       <div className="overview-tape__main-row">
         <strong className="overview-tape__main">{item.primary ?? 'n/a'}</strong>
-        {item.zScore || item.zSignal ? (
+        {item.zScore ? (
           <div className="overview-tape__zstack">
-            {item.zScore ? <span className="overview-tape__zscore">{item.zScore}</span> : null}
-            {item.zSignal ? (
-              <span className={`overview-tape__zsignal overview-tape__zsignal--${item.zTone ?? 'normal'}`}>{item.zSignal}</span>
-            ) : null}
+            <span className="overview-tape__zscore">{item.zScore}</span>
           </div>
         ) : null}
       </div>
@@ -230,21 +221,34 @@ function TapeItem({ item }: { item: TapeItemData }) {
   )
 }
 
-function buildMicrostructureItem(
-  label: string,
-  key: string,
-  current: number | null | undefined,
-  stat?: HistoricStat,
+function buildLastPriceSpreadItem(
+  current: AnalyticsSymbolFeed['current_snapshot'],
+  currentStats: Record<string, HistoricStat>,
+  marketTone: TapeTone,
 ): TapeItemData {
-  const zContext = buildZScoreContext(stat)
+  const spreadContext = buildZScoreContext(currentStats.spread_bps)
+
   return {
-    key,
-    className: 'overview-tape__item',
-    label,
-    primary: formatMetricValue(key, current),
-    zScore: zContext.zScore,
-    zSignal: zContext.signal,
-    zTone: zContext.tone,
+    key: 'last-price-spread',
+    className: 'overview-tape__item overview-tape__item--paired overview-tape__item--last-spread',
+    pairs: [
+      {
+        label: 'Last price',
+        value: formatMetricValue('last_price', current.last_price),
+        secondary: formatBandDelta('last_price', current.last_price, current.previous_close),
+        inline:
+          current.daily_change_percent === null || current.daily_change_percent === undefined
+            ? undefined
+            : `(${formatPercentFromWhole(current.daily_change_percent)})`,
+        inlineTone: marketTone,
+        secondaryTone: marketTone,
+      },
+      {
+        label: 'SPREAD BPS',
+        value: formatMetricValue('spread_bps', current.spread_bps),
+        zScore: spreadContext.zScore,
+      },
+    ],
   }
 }
 
@@ -263,15 +267,11 @@ function buildObiPairItem(
         label: 'OBI L1',
         value: formatMetricValue('obi_l1', current.obi_l1),
         zScore: obiL1Context.zScore,
-        zSignal: obiL1Context.signal,
-        zTone: obiL1Context.tone,
       },
       {
         label: 'OBI TOP 5',
         value: formatMetricValue('obi_top_5', current.obi_top_5),
         zScore: obiTop5Context.zScore,
-        zSignal: obiTop5Context.signal,
-        zTone: obiTop5Context.tone,
       },
     ],
   }
@@ -290,22 +290,16 @@ function buildZScoreContext(stat?: HistoricStat) {
     stat.stddev === undefined ||
     stat.stddev === 0
   ) {
-    return { zScore: undefined, signal: undefined, tone: undefined as undefined }
+    return { zScore: undefined }
   }
 
   const zScore = computeZScore(stat)
   if (zScore === null) {
-    return { zScore: undefined, signal: undefined, tone: undefined as undefined }
+    return { zScore: undefined }
   }
-
-  const absoluteZ = Math.abs(zScore)
-  const signal = absoluteZ >= 3 ? 'Anomaly' : absoluteZ >= 2 ? 'Review' : 'Normal'
-  const tone: ZTone = absoluteZ >= 3 ? 'anomaly' : absoluteZ >= 2 ? 'review' : 'normal'
 
   return {
     zScore: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(1)}\u03c3`,
-    signal,
-    tone,
   }
 }
 

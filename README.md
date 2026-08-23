@@ -116,3 +116,64 @@ public/                  # assets publicos sin bundle
 - `daily_closing_snapshots`: carga automatica segun `symbol`.
 
 No hay botones manuales para recargar datos desde Dynamo/API Gateway.
+
+## Discrete Optimization Note
+
+La simulacion determinista de `Overview` ahora modela el lado de salida como un problema de optimizacion discreta con restricciones.
+
+Objetivo:
+
+- minimizar `q`
+
+Variables de decision:
+
+- `q ∈ Z+`
+- `ask ∈ Z+` en una grilla discreta de precio
+
+Restricciones:
+
+- `net_profit(q, bid, ask) >= profit_target`
+- `ask_min <= ask <= ask_max`
+
+Formalmente:
+
+```text
+min q
+
+sujeto a
+
+q ∈ Z+
+ask_min <= ask <= ask_max
+net_profit(q, bid, ask) >= profit_target
+```
+
+Donde:
+
+- `bid` es el precio fijado por el usuario en el grafico de compra.
+- `profit_target` es uno de `100K`, `200K` o `300K`.
+- `ask_min = min(best_bid, microprice, last_price)`.
+- `ask_max = high_price`.
+- `net_profit` descuenta la comision `trii Pro` de compra y de venta.
+
+Comision usada:
+
+- hasta `5.000.000`: `14.875 * 50% = 7.437,5` por lado
+- por encima de `5.000.000`: `monto * 0,25% * 1,19 * 50%`
+- equivalente simplificado por lado para montos superiores: `monto * 0,0014875`
+
+Estrategia de solucion implementada:
+
+1. Se fija `bid`.
+2. Se fija `profit_target`.
+3. Se busca la menor cantidad entera `q` tal que exista solucion usando `ask = ask_max`.
+4. Para esa `q` minima, se encuentra el menor `ask` factible dentro del rango permitido mediante busqueda binaria discreta.
+5. Ese resultado se conserva como la solucion base de etapa 1.
+6. En una etapa 2 separada, se usa esa solucion base para refinar el `ask` segun un rango de inversion permitido.
+7. El rango de inversion objetivo para la compra es `5.000.000 <= bid * q <= 15.000.000`.
+8. Para esa etapa 2, se toma el `ask` encontrado en la etapa 1 como techo y se recorren asks desde `ask_min` hasta ese valor.
+9. Para cada `ask` fijo del recorrido, se resuelve de nuevo la menor `q` posible.
+10. El limite superior de compra de esa etapa 2 puede cambiarse desde la UI con botones `5M`, `10M` y `15M`.
+11. Se elige el primer escenario cuya compra cae dentro del rango `5M-max_buy`; ese escenario pasa a ser la recomendacion final.
+12. Si no aparece ninguna mejora dentro del rango, se conserva la solucion base de etapa 1.
+
+El grafico de `Ask` sigue permitiendo exploracion manual, pero la tabla principal ya se alimenta de la solucion optimizada calculada.

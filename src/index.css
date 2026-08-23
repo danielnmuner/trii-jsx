@@ -738,11 +738,19 @@ button {
 }
 
 .overview-tape__row--microstructure {
-  grid-template-columns: minmax(0, 0.96fr) minmax(0, 0.82fr) minmax(0, 0.82fr) minmax(0, 0.66fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.2fr);
+  grid-template-columns:
+    minmax(0, 0.96fr)
+    minmax(0, 0.82fr)
+    minmax(0, 0.82fr)
+    minmax(0, 0.82fr)
+    minmax(0, 0.74fr)
+    minmax(0, 0.78fr)
+    minmax(0, 0.9fr)
+    minmax(0, 1.16fr);
 }
 
 .overview-tape__row--market {
-  grid-template-columns: minmax(0, 0.5fr) minmax(0, 0.54fr) minmax(0, 4.23fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .overview-tape__item {
@@ -789,6 +797,27 @@ button {
 
 .overview-tape__item--simulation {
   padding: 4px 5px;
+  grid-column: 1 / -1;
+}
+
+.overview-tape__item--spread-bps .overview-tape__main-row {
+  gap: 5px;
+}
+
+.overview-tape__item--spread-bps .overview-tape__zstack {
+  gap: 4px;
+}
+
+.overview-tape__item--last-spread {
+  gap: 6px;
+}
+
+.overview-tape__item--last-spread .overview-tape__pair {
+  gap: 2px;
+}
+
+.overview-tape__item--last-spread .overview-tape__pair-main-row {
+  gap: 5px;
 }
 
 .overview-tape__item--market .overview-tape__main,
@@ -863,7 +892,7 @@ button {
 }
 
 .overview-tape__row--market > .overview-tape__item:not(.overview-tape__item--simulation) {
-  padding: 3px 5px;
+  padding: 3px 4px;
   gap: 1px;
 }
 
@@ -903,6 +932,10 @@ button {
 
 .overview-tape__row--market > .overview-tape__item--market-primary .overview-tape__pair-value {
   font-size: 0.82rem;
+}
+
+.overview-tape__row--market > .overview-tape__item--market-primary {
+  padding-inline: 3px;
 }
 
 .overview-tape__sub--positive {
@@ -1150,41 +1183,19 @@ button {
 .overview-sim {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) 1px minmax(148px, 0.88fr);
+  grid-template-columns:
+    minmax(0, 1.55fr)
+    1px
+    minmax(0, 1.55fr)
+    1px
+    max-content
+    1px
+    max-content;
   gap: 10px;
   align-items: stretch;
 }
 
-.overview-sim {
-  min-width: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.overview-sim__charts {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.overview-sim__chartDivider {
-  align-self: stretch;
-  width: 1px;
-  background-image: linear-gradient(
-    to bottom,
-    rgba(212, 222, 238, 0.22) 0,
-    rgba(212, 222, 238, 0.22) 42%,
-    transparent 42%,
-    transparent 100%
-  );
-  background-size: 1px 5px;
-  background-repeat: repeat-y;
-  background-position: center;
-  opacity: 0.72;
-}
-
-.overview-sim__tableDivider {
+.overview-sim__sectionDivider {
   align-self: stretch;
   width: 1px;
   background-image: linear-gradient(
@@ -1290,6 +1301,20 @@ button {
   letter-spacing: 0.08em;
 }
 
+.overview-sim__optimizedLine {
+  stroke: rgba(0, 255, 153, 0.94);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.overview-sim__optimizedLabel {
+  fill: rgba(0, 255, 163, 0.98);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .overview-sim__point {
   fill: rgba(11, 14, 18, 0.98);
   stroke: rgba(115, 205, 255, 0.74);
@@ -1324,7 +1349,6 @@ button {
 .overview-sim__activePrice,
 .overview-sim__activeMetaPrice,
 .overview-sim__activeMetaDelta,
-.overview-sim__lossMeta,
 .overview-sim__cell {
   font-family: "IBM Plex Mono", monospace;
   letter-spacing: 0.04em;
@@ -1366,14 +1390,6 @@ button {
   font-weight: 500;
 }
 
-.overview-sim__tableShell {
-  min-width: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow-x: auto;
-}
-
 .overview-sim__targetSwitch {
   display: inline-flex;
   align-items: center;
@@ -1408,16 +1424,12 @@ button {
   text-shadow: 0 0 10px rgba(0, 255, 255, 0.16);
 }
 
-.overview-sim__tables {
-  width: fit-content;
-  max-width: 100%;
+.overview-sim__tableCard {
+  min-width: 0;
   display: flex;
   justify-content: center;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: 8px;
-  margin: 0 auto;
-  align-self: center;
+  justify-self: center;
 }
 
 .overview-sim__table {
@@ -1425,7 +1437,6 @@ button {
   min-width: max-content;
   border-collapse: collapse;
   table-layout: auto;
-  flex: 0 0 auto;
 }
 
 .overview-sim__table--detail {
@@ -1436,7 +1447,7 @@ button {
 
 .overview-sim__table th,
 .overview-sim__table td {
-  padding: 4px 5px;
+  padding: 4px 4px;
   border-top: 1px dashed rgba(255, 255, 255, 0.1);
   border-left: 1px dashed rgba(255, 255, 255, 0.08);
   white-space: nowrap;
@@ -1456,12 +1467,12 @@ button {
 .overview-sim__table tbody th {
   text-align: left;
   width: 1%;
-  padding-right: 8px;
+  padding-right: 6px;
 }
 
 .overview-sim__cell {
   color: rgba(236, 244, 255, 0.9);
-  font-size: 0.62rem;
+  font-size: 0.59rem;
   font-weight: 700;
   text-align: right;
   min-width: 0;
@@ -1756,35 +1767,6 @@ button {
   opacity: 0.8;
 }
 
-.overview-tape__zsignal {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.5rem;
-  line-height: 1.1;
-  white-space: nowrap;
-  background: rgba(17, 24, 39, 0.08);
-  color: rgba(15, 23, 42, 0.68);
-}
-
-.overview-tape__zsignal--normal {
-  background: rgba(100, 116, 139, 0.14);
-  color: #475569;
-}
-
-.overview-tape__zsignal--review {
-  background: rgba(59, 130, 246, 0.16);
-  color: #1d4ed8;
-}
-
-.overview-tape__zsignal--anomaly {
-  background: rgba(248, 113, 113, 0.18);
-  color: #b91c1c;
-}
-
 .overview-tape__pair {
   display: flex;
   flex-direction: column;
@@ -1794,7 +1776,7 @@ button {
 
 .overview-tape__pairBadgeRow {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin-bottom: 2px;
 }
 
@@ -3962,11 +3944,6 @@ button {
     font-size: 0.5rem;
   }
 
-  .overview-tape__zsignal {
-    font-size: 0.44rem;
-    padding: 1px 5px;
-  }
-
   .overview-seasonality__chart,
   .overview-seasonality__bar-track {
     min-height: 26px;
@@ -3975,10 +3952,11 @@ button {
 
   .overview-sim {
     gap: 7px;
+    grid-template-columns: 1fr;
   }
 
-  .overview-sim__charts {
-    grid-template-columns: 1fr;
+  .overview-sim__sectionDivider {
+    display: none;
   }
 
   .overview-sim__cell {

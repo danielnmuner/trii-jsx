@@ -4,9 +4,9 @@ import { env } from '../../../shared/config/env'
 import { fetchMarketTape, type MarketTapeSnapshot } from '../api/client'
 import { MARKET_TAPE_CACHE_TTL_MS } from '../lib/instruments'
 
-const MARKET_TAPE_STORAGE_KEY = 'trii.market-tape.snapshot.v1'
-const MARKET_TAPE_REFERENCE_KEY = 'trii.market-tape.reference.v1'
-const MARKET_TAPE_SESSION_KEY = 'trii.market-tape.session-fetched.v1'
+const MARKET_TAPE_STORAGE_KEY = 'trii.market-tape.snapshot.v2'
+const MARKET_TAPE_REFERENCE_KEY = 'trii.market-tape.reference.v2'
+const MARKET_TAPE_SESSION_KEY = 'trii.market-tape.session-fetched.v2'
 
 type StoredMarketTapeSnapshot = {
   updatedAt: number
@@ -29,48 +29,6 @@ function isValidQuote(value: unknown) {
     typeof quote.deltaPercent === 'number' &&
     typeof quote.asOf === 'string'
   )
-}
-
-function readMarketTapeSnapshot(): StoredMarketTapeSnapshot | null {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(MARKET_TAPE_STORAGE_KEY)
-    if (!rawValue) {
-      return null
-    }
-
-    const parsedValue: unknown = JSON.parse(rawValue)
-    if (!parsedValue || typeof parsedValue !== 'object') {
-      return null
-    }
-
-    const candidate = parsedValue as Record<string, unknown>
-    const updatedAt = typeof candidate.updatedAt === 'number' ? candidate.updatedAt : NaN
-    const snapshot = candidate.snapshot
-
-    if (!Number.isFinite(updatedAt) || !snapshot || typeof snapshot !== 'object') {
-      return null
-    }
-
-    const parsedSnapshot = snapshot as Record<string, unknown>
-    if (
-      typeof parsedSnapshot.fetchedAt !== 'string' ||
-      !Array.isArray(parsedSnapshot.quotes) ||
-      !parsedSnapshot.quotes.every(isValidQuote)
-    ) {
-      return null
-    }
-
-    return {
-      updatedAt,
-      snapshot: parsedSnapshot as unknown as MarketTapeSnapshot,
-    }
-  } catch {
-    return null
-  }
 }
 
 function readStoredSnapshot(key: string): StoredMarketTapeSnapshot | null {
@@ -166,7 +124,7 @@ function markMarketTapeSessionFetch() {
 }
 
 export function useMarketTape() {
-  const cachedSnapshot = useMemo(() => readMarketTapeSnapshot(), [])
+  const cachedSnapshot = useMemo(() => readStoredSnapshot(MARKET_TAPE_STORAGE_KEY), [])
   const referenceSnapshot = useMemo(() => readMarketTapeReferenceSnapshot(), [])
   const sessionFetched = useMemo(() => hasMarketTapeSessionFetch(), [])
   const canFetchMarketTape = !import.meta.env.DEV || Boolean(env.alphaVantageApiKey || env.twelveDataApiKey)

@@ -36,6 +36,7 @@ export function SeasonalityMiniChart({ profile, capturedAt }: SeasonalityMiniCha
   }, [availableDays, capturedAt])
 
   const [activeDay, setActiveDay] = useState<(typeof weekdayOrder)[number] | undefined>(defaultDay)
+  const [hoveredTime, setHoveredTime] = useState<string | null>(null)
 
   useEffect(() => {
     if (!defaultDay) {
@@ -45,6 +46,10 @@ export function SeasonalityMiniChart({ profile, capturedAt }: SeasonalityMiniCha
 
     setActiveDay((currentValue) => (currentValue && availableDays.some((value) => value === currentValue) ? currentValue : defaultDay))
   }, [availableDays, defaultDay])
+
+  useEffect(() => {
+    setHoveredTime(null)
+  }, [activeDay])
 
   if (!profile || availableDays.length === 0 || !activeDay) {
     return (
@@ -92,13 +97,25 @@ export function SeasonalityMiniChart({ profile, capturedAt }: SeasonalityMiniCha
       >
         {buckets.map((bucket) => {
           const height = maxAccumulatedVolume <= 0 ? 8 : Math.max((bucket.accumulatedVolume / maxAccumulatedVolume) * 100, 8)
+          const isHovered = bucket.time === hoveredTime
+
           return (
             <div key={bucket.time} className="overview-seasonality__bar-group">
               <div
                 className="overview-seasonality__bar-track"
-                title={`${bucket.time} · Vol ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(bucket.accumulatedVolume)}`}
+                onMouseEnter={() => setHoveredTime(bucket.time)}
+                onMouseLeave={() => setHoveredTime((currentValue) => (currentValue === bucket.time ? null : currentValue))}
+                onFocus={() => setHoveredTime(bucket.time)}
+                onBlur={() => setHoveredTime((currentValue) => (currentValue === bucket.time ? null : currentValue))}
                 aria-label={`${bucket.time} accumulated volume ${bucket.accumulatedVolume}`}
+                tabIndex={0}
               >
+                {isHovered ? (
+                  <div className="overview-seasonality__tooltip" role="tooltip">
+                    <span>{bucket.time}</span>
+                    <strong>{formatCompactVolume(bucket.accumulatedVolume)}</strong>
+                  </div>
+                ) : null}
                 <div className="overview-seasonality__bar" style={{ height: `${height}%` }} />
               </div>
             </div>
@@ -141,6 +158,19 @@ function sanitizeNumber(value: number | null | undefined) {
     return 0
   }
   return value
+}
+
+function formatCompactVolume(value: number) {
+  if (Math.abs(value) >= 1_000) {
+    return `${new Intl.NumberFormat('en-US', {
+      maximumFractionDigits: 1,
+      minimumFractionDigits: 1,
+    }).format(value / 1_000)}K`
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(value)
 }
 
 function resolveWeekdayKey(value: string | null | undefined): (typeof weekdayOrder)[number] | undefined {

@@ -76,11 +76,4 @@ export const MARKET_TAPE_INSTRUMENTS: MarketTapeInstrument[] = [
     kind: 'commodity-spot',
     symbol: 'GOLD',
   },
-  {
-    id: 'silver',
-    label: 'Silver',
-    assetClass: 'metals',
-    kind: 'commodity-spot',
-    symbol: 'SILVER',
-  },
 ]

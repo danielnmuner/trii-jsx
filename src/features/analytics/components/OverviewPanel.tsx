@@ -1,10 +1,10 @@
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
+import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
 import { SymbolIdentity } from './SymbolIdentity'
 import {
   computeCumulativeVwap,
   formatBandDelta,
-  formatBandDeltaWithRelative,
   formatMetricValue,
   formatPercentFromWhole,
   formatSampleCount,
@@ -31,7 +31,8 @@ type TapeItemData = {
   zTone?: ZTone
   inline?: string
   inlineTone?: TapeTone
-  pairs?: Array<{ label: string; value: string }>
+  secondaryTone?: TapeTone
+  pairs?: Array<{ label: string; value: string; zScore?: string; zSignal?: string; zTone?: ZTone }>
 }
 
 export function OverviewPanel({ snapshots }: OverviewPanelProps) {
@@ -39,13 +40,10 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
     <section className="overview-stack" aria-label="Market overview">
       {snapshots.map((snapshot) => {
         const current = snapshot.current_snapshot
-        const previous = snapshot.previous_snapshot
         const currentStats = snapshot.current_stats
         const sampleCount = resolveSampleCount(currentStats)
         const currentVwap = computeCumulativeVwap(current)
-        const previousVwap = previous ? computeCumulativeVwap(previous) : null
         const currentSpread = deriveSpread(current.best_ask_price, current.best_bid_price)
-        const previousSpread = previous ? deriveSpread(previous.best_ask_price, previous.best_bid_price) : null
         const marketTone: TapeTone =
           current.last_price !== null &&
           current.last_price !== undefined &&
@@ -56,27 +54,52 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
               : 'negative'
             : 'neutral'
 
+        const freshnessLabel = formatFreshnessTimestamp(current.captured_at)
+        const freshnessTone = deriveFreshnessTone(current.captured_at)
+        const sampleLabel = formatSampleCount(sampleCount)
+        const headerMeta = sampleLabel ? `${freshnessLabel} (${sampleLabel})` : freshnessLabel
+
         const topItems: TapeItemData[] = [
           {
-            key: 'symbol',
-            className: 'overview-tape__item overview-tape__item--symbol',
-            label: 'Symbol',
-            primary: snapshot.symbol,
-            badge: formatFreshnessTimestamp(current.captured_at),
-            badgeTone: deriveFreshnessTone(current.captured_at),
-            secondary: formatSampleCount(sampleCount),
+            key: 'mid-micro',
+            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--microstructure-pair',
+            pairs: [
+              { label: 'Mid price', value: formatMetricValue('mid_price', current.mid_price) },
+              { label: 'Microprice', value: formatMetricValue('microprice', current.microprice) },
+            ],
           },
-          buildMicrostructureItem('OBI L1', 'obi_l1', current.obi_l1, previous?.obi_l1, currentStats.obi_l1),
-          buildMicrostructureItem('OBI TOP 5', 'obi_top_5', current.obi_top_5, previous?.obi_top_5, currentStats.obi_top_5),
-          buildMicrostructureItem('SPREAD BPS', 'spread_bps', current.spread_bps, previous?.spread_bps, currentStats.spread_bps),
-          buildMicrostructureItem('MID PRICE', 'mid_price', current.mid_price, previous?.mid_price),
-          buildMicrostructureItem('MICROPRICE', 'microprice', current.microprice, previous?.microprice),
+          {
+            key: 'vwap-spread',
+            className: 'overview-tape__item overview-tape__item--paired',
+            pairs: [
+              { label: 'Cumulative VWAP', value: formatMetricValue('vwap_cumulative', currentVwap) },
+              { label: 'Spread', value: formatMetricValue('spread', currentSpread) },
+            ],
+          },
+          {
+            key: 'flow',
+            className: 'overview-tape__item overview-tape__item--paired',
+            pairs: [
+              { label: 'Traded volume', value: formatMetricValue('traded_volume', current.traded_volume) },
+              { label: 'Traded value', value: formatMetricValue('traded_value', current.traded_value) },
+            ],
+          },
+          buildMicrostructureItem('SPREAD BPS', 'spread_bps', current.spread_bps, currentStats.spread_bps),
+          {
+            key: 'price_range',
+            className: 'overview-tape__item overview-tape__item--paired',
+            pairs: [
+              { label: 'High price', value: formatMetricValue('high_price', current.high_price) },
+              { label: 'Low price', value: formatMetricValue('low_price', current.low_price) },
+            ],
+          },
+          buildObiPairItem(current, currentStats),
         ]
 
         const bottomItems: TapeItemData[] = [
           {
             key: 'last_price',
-            className: `overview-tape__item overview-tape__item--${marketTone}`,
+            className: `overview-tape__item overview-tape__item--${marketTone} overview-tape__item--market-primary`,
             label: 'Last price',
             primary: formatMetricValue('last_price', current.last_price),
             secondary: formatBandDelta('last_price', current.last_price, current.previous_close),
@@ -87,41 +110,13 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
             inlineTone: marketTone,
           },
           {
-            key: 'vwap_cumulative',
-            className: 'overview-tape__item overview-tape__item--market',
-            label: 'Cumulative VWAP',
-            primary: formatMetricValue('vwap_cumulative', currentVwap),
-            secondary: formatBandDeltaWithRelative('vwap_cumulative', currentVwap, previousVwap),
-          },
-          {
             key: 'best_prices',
-            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--market',
+            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--market overview-tape__item--market-primary',
+            badge: isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price) ? 'Stop' : 'Normal',
+            badgeTone: isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price) ? 'stale' : 'fresh',
             pairs: [
-              { label: 'Best bid', value: formatMetricValue('best_bid_price', current.best_bid_price) },
               { label: 'Best ask', value: formatMetricValue('best_ask_price', current.best_ask_price) },
-            ],
-          },
-          {
-            key: 'price_range',
-            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--market',
-            pairs: [
-              { label: 'High price', value: formatMetricValue('high_price', current.high_price) },
-              { label: 'Low price', value: formatMetricValue('low_price', current.low_price) },
-            ],
-          },
-          {
-            key: 'spread',
-            className: 'overview-tape__item overview-tape__item--market',
-            label: 'Spread',
-            primary: formatMetricValue('spread', currentSpread),
-            secondary: formatBandDeltaWithRelative('spread', currentSpread, previousSpread),
-          },
-          {
-            key: 'flow',
-            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--market',
-            pairs: [
-              { label: 'Traded volume', value: formatMetricValue('traded_volume', current.traded_volume) },
-              { label: 'Traded value', value: formatMetricValue('traded_value', current.traded_value) },
+              { label: 'Best bid', value: formatMetricValue('best_bid_price', current.best_bid_price) },
             ],
           },
         ]
@@ -134,6 +129,7 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
                   <SymbolIdentity symbol={snapshot.symbol} />
                 </h3>
               </div>
+              <span className={`overview-card__meta overview-card__meta--${freshnessTone}`}>{headerMeta}</span>
             </header>
 
             <div
@@ -145,6 +141,7 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
                 {topItems.map((item) => (
                   <TapeItem key={item.key} item={item} />
                 ))}
+                <SeasonalityMiniChart profile={snapshot.seasonality_profile} capturedAt={current.captured_at} />
               </div>
             </div>
 
@@ -153,7 +150,7 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
                 {bottomItems.map((item) => (
                   <TapeItem key={item.key} item={item} />
                 ))}
-                <SeasonalityMiniChart profile={snapshot.seasonality_profile} capturedAt={current.captured_at} />
+                <DeterministicSimulationTile snapshot={current} />
               </div>
             </div>
           </article>
@@ -167,10 +164,25 @@ function TapeItem({ item }: { item: TapeItemData }) {
   if (item.pairs) {
     return (
       <section className={item.className}>
+        {item.badge ? (
+          <div className="overview-tape__pairBadgeRow">
+            <span className={`overview-tape__badge overview-tape__badge--${item.badgeTone ?? 'fresh'}`}>{item.badge}</span>
+          </div>
+        ) : null}
         {item.pairs.map((pair) => (
           <div key={pair.label} className="overview-tape__pair">
             <span className="overview-tape__pair-label">{pair.label}</span>
-            <strong className="overview-tape__pair-value">{pair.value}</strong>
+            <div className="overview-tape__pair-main-row">
+              <strong className="overview-tape__pair-value">{pair.value}</strong>
+              {pair.zScore || pair.zSignal ? (
+                <div className="overview-tape__pair-zstack">
+                  {pair.zScore ? <span className="overview-tape__zscore">{pair.zScore}</span> : null}
+                  {pair.zSignal ? (
+                    <span className={`overview-tape__zsignal overview-tape__zsignal--${pair.zTone ?? 'normal'}`}>{pair.zSignal}</span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         ))}
       </section>
@@ -205,15 +217,15 @@ function TapeItem({ item }: { item: TapeItemData }) {
       ) : null}
 
       {item.inline ? (
-        <div className="overview-tape__sub overview-tape__sub--inline">
+        <div className={`overview-tape__sub overview-tape__sub--inline overview-tape__sub--${item.secondaryTone ?? 'neutral'}`}>
           <span>{item.secondary ?? 'No prior point'}</span>
           <span className={`overview-tape__inline-tone overview-tape__inline-tone--${item.inlineTone ?? 'neutral'}`}>
             {item.inline}
           </span>
         </div>
-      ) : (
-        <div className="overview-tape__sub">{item.secondary ?? 'No prior point'}</div>
-      )}
+      ) : item.secondary ? (
+        <div className={`overview-tape__sub overview-tape__sub--${item.secondaryTone ?? 'neutral'}`}>{item.secondary ?? 'No prior point'}</div>
+      ) : null}
     </section>
   )
 }
@@ -222,7 +234,6 @@ function buildMicrostructureItem(
   label: string,
   key: string,
   current: number | null | undefined,
-  previous: number | null | undefined,
   stat?: HistoricStat,
 ): TapeItemData {
   const zContext = buildZScoreContext(stat)
@@ -231,10 +242,38 @@ function buildMicrostructureItem(
     className: 'overview-tape__item',
     label,
     primary: formatMetricValue(key, current),
-    secondary: formatBandDeltaWithRelative(key, current, previous),
     zScore: zContext.zScore,
     zSignal: zContext.signal,
     zTone: zContext.tone,
+  }
+}
+
+function buildObiPairItem(
+  current: AnalyticsSymbolFeed['current_snapshot'],
+  currentStats: Record<string, HistoricStat>,
+): TapeItemData {
+  const obiL1Context = buildZScoreContext(currentStats.obi_l1)
+  const obiTop5Context = buildZScoreContext(currentStats.obi_top_5)
+
+  return {
+    key: 'obi-pair',
+    className: 'overview-tape__item overview-tape__item--paired',
+    pairs: [
+      {
+        label: 'OBI L1',
+        value: formatMetricValue('obi_l1', current.obi_l1),
+        zScore: obiL1Context.zScore,
+        zSignal: obiL1Context.signal,
+        zTone: obiL1Context.tone,
+      },
+      {
+        label: 'OBI TOP 5',
+        value: formatMetricValue('obi_top_5', current.obi_top_5),
+        zScore: obiTop5Context.zScore,
+        zSignal: obiTop5Context.signal,
+        zTone: obiTop5Context.tone,
+      },
+    ],
   }
 }
 
@@ -297,7 +336,15 @@ function deriveSpread(bestAsk: number | null | undefined, bestBid: number | null
     return null
   }
 
-  return bestAsk - bestBid
+  return Math.abs(bestAsk - bestBid)
+}
+
+function isBestBidCrossingAsk(bestBid: number | null | undefined, bestAsk: number | null | undefined) {
+  if (bestBid === null || bestBid === undefined || bestAsk === null || bestAsk === undefined) {
+    return false
+  }
+
+  return bestBid > bestAsk
 }
 
 function formatFreshnessTimestamp(value: string | null | undefined) {

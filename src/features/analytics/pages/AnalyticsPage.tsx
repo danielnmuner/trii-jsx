@@ -11,8 +11,10 @@ import { ZscoreOpportunityPanel } from '../components/ZscoreOpportunityPanel'
 import { useAnalyticsCatalog, useAnalyticsSnapshots, useDailyClosingSnapshots, useZscoreOpportunityWindows } from '../hooks/useAnalytics'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { MarketTape } from '../../market-tape/components/MarketTape'
+import type { AnalyticsSymbolFeed } from '../api/schemas'
 
 const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
+const MIN_OVERVIEW_SAMPLE_COUNT = 10
 
 function toIsoBoundaries(values: string[]) {
   const epochValues = values
@@ -34,6 +36,11 @@ function toIsoBoundaries(values: string[]) {
 
 function getErrorMessage(error: unknown, fallback = 'Unknown error') {
   return error instanceof Error ? error.message : fallback
+}
+
+function resolveOverviewSampleCount(snapshot: AnalyticsSymbolFeed) {
+  const counts = Object.values(snapshot.current_stats).map((stat) => stat?.sample_count ?? 0)
+  return Math.max(0, ...counts)
 }
 
 export function AnalyticsPage() {
@@ -103,13 +110,47 @@ export function AnalyticsPage() {
     }
   }, [snapshotsQuery.results])
 
-  const latestBySymbol = useMemo(
-    () =>
-      Object.fromEntries(
-        snapshotsQuery.results.map((result) => [result.symbol, result.current_snapshot]),
-      ),
+  const eligibleOverviewResults = useMemo(
+    () => snapshotsQuery.results.filter((result) => resolveOverviewSampleCount(result) >= MIN_OVERVIEW_SAMPLE_COUNT),
     [snapshotsQuery.results],
   )
+
+  const eligibleOverviewSymbolSet = useMemo(
+    () => new Set(eligibleOverviewResults.map((result) => result.symbol)),
+    [eligibleOverviewResults],
+  )
+
+  const coreVisibleSymbols = useMemo(
+    () => symbolOrder.filter((symbol) => eligibleOverviewSymbolSet.has(symbol)),
+    [symbolOrder, eligibleOverviewSymbolSet],
+  )
+
+  const coreSelectedSymbols = useMemo(
+    () => effectiveSelectedSymbols.filter((symbol) => eligibleOverviewSymbolSet.has(symbol)),
+    [effectiveSelectedSymbols, eligibleOverviewSymbolSet],
+  )
+
+  const coreLatestBySymbol = useMemo(
+    () =>
+      Object.fromEntries(
+        eligibleOverviewResults.map((result) => [result.symbol, result.current_snapshot]),
+      ),
+    [eligibleOverviewResults],
+  )
+
+  const handleCoreSelectedSymbolsChange = (nextVisibleSelectedSymbols: string[]) => {
+    setSelectedSymbols((current) => {
+      const hiddenSelections = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
+      return [...hiddenSelections, ...nextVisibleSelectedSymbols]
+    })
+  }
+
+  const handleCoreSymbolOrderChange = (nextVisibleOrder: string[]) => {
+    setSymbolOrder((current) => {
+      const hiddenSymbols = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
+      return [...nextVisibleOrder, ...hiddenSymbols]
+    })
+  }
 
   const hasCatalogData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
@@ -253,12 +294,12 @@ export function AnalyticsPage() {
       />
 
       <AnalyticsFilters
-        orderedSymbols={symbolOrder}
-        latestBySymbol={latestBySymbol}
-        selectedSymbols={effectiveSelectedSymbols}
-        symbols={symbols}
-        onSelectedSymbolsChange={setSelectedSymbols}
-        onSymbolOrderChange={setSymbolOrder}
+        orderedSymbols={coreVisibleSymbols}
+        latestBySymbol={coreLatestBySymbol}
+        selectedSymbols={coreSelectedSymbols}
+        symbols={coreVisibleSymbols}
+        onSelectedSymbolsChange={handleCoreSelectedSymbolsChange}
+        onSymbolOrderChange={handleCoreSymbolOrderChange}
       />
 
       {catalogQuery.isError && !hasCatalogData ? (
@@ -281,8 +322,10 @@ export function AnalyticsPage() {
             />
           ) : !hasSnapshotData && snapshotsQuery.isLoading ? (
             null
+          ) : eligibleOverviewResults.length === 0 ? (
+            <StatusState title="No Data" description="No symbols meet the minimum sample support required for overview." />
           ) : (
-            <OverviewPanel snapshots={snapshotsQuery.results} />
+            <OverviewPanel snapshots={eligibleOverviewResults} />
           )
         ) : null}
 

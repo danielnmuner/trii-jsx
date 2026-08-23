@@ -84,7 +84,6 @@ const INSTRUMENTS: MarketTapeInstrument[] = [
   { id: 'usd-jpy', label: 'Yen', assetClass: 'fx', kind: 'fx', fromSymbol: 'USD', toSymbol: 'JPY' },
   { id: 'usd-chf', label: 'Swiss Franc', assetClass: 'fx', kind: 'fx', fromSymbol: 'USD', toSymbol: 'CHF' },
   { id: 'gold', label: 'Gold', assetClass: 'metals', kind: 'commodity-spot', symbol: 'GOLD' },
-  { id: 'silver', label: 'Silver', assetClass: 'metals', kind: 'commodity-spot', symbol: 'SILVER' },
 ]
 
 const REQUEST_GAP_MS = 1_250
@@ -276,6 +275,114 @@ function mergeSnapshots(primary: MarketTapeSnapshot | null, fallback: MarketTape
   }
 }
 
+function projectTapeToCop(snapshot: MarketTapeSnapshot): MarketTapeSnapshot {
+  const quotes = new Map(snapshot.quotes.map((quote) => [quote.id, quote]))
+  const usdCop = quotes.get('usd-cop')
+  const eurUsd = quotes.get('eur-usd')
+  const gbpUsd = quotes.get('gbp-usd')
+  const usdJpy = quotes.get('usd-jpy')
+  const usdChf = quotes.get('usd-chf')
+  const gold = quotes.get('gold')
+
+  return {
+    fetchedAt: snapshot.fetchedAt,
+    quotes: [
+      usdCop,
+      deriveCrossQuote({
+        id: 'eur-cop',
+        label: 'Euro / COP',
+        assetClass: 'fx',
+        base: eurUsd,
+        anchor: usdCop,
+        formula: 'multiply',
+      }),
+      deriveCrossQuote({
+        id: 'gbp-cop',
+        label: 'Pound / COP',
+        assetClass: 'fx',
+        base: gbpUsd,
+        anchor: usdCop,
+        formula: 'multiply',
+      }),
+      deriveCrossQuote({
+        id: 'jpy-cop',
+        label: 'Yen / COP',
+        assetClass: 'fx',
+        base: usdJpy,
+        anchor: usdCop,
+        formula: 'divide',
+      }),
+      deriveCrossQuote({
+        id: 'chf-cop',
+        label: 'Swiss Franc / COP',
+        assetClass: 'fx',
+        base: usdChf,
+        anchor: usdCop,
+        formula: 'divide',
+      }),
+      gold,
+    ].filter((quote): quote is MarketTapeQuote => Boolean(quote)),
+  }
+}
+
+function deriveCrossQuote(input: {
+  id: string
+  label: string
+  assetClass: MarketTapeAssetClass
+  base: MarketTapeQuote | undefined
+  anchor: MarketTapeQuote | undefined
+  formula: 'multiply' | 'divide'
+}): MarketTapeQuote | null {
+  const { id, label, assetClass, base, anchor, formula } = input
+  if (!base || !anchor) {
+    return null
+  }
+
+  const price =
+    formula === 'multiply'
+      ? base.price * anchor.price
+      : base.price === 0
+        ? Number.NaN
+        : anchor.price / base.price
+  const previousPrice =
+    formula === 'multiply'
+      ? base.previousPrice * anchor.previousPrice
+      : base.previousPrice === 0
+        ? Number.NaN
+        : anchor.previousPrice / base.previousPrice
+
+  if (!Number.isFinite(price) || !Number.isFinite(previousPrice)) {
+    return null
+  }
+
+  const delta = price - previousPrice
+  return {
+    id,
+    label,
+    assetClass,
+    price,
+    previousPrice,
+    delta,
+    deltaPercent: previousPrice === 0 ? 0 : (delta / previousPrice) * 100,
+    asOf: maxTimestamp(base.asOf, anchor.asOf),
+  }
+}
+
+function maxTimestamp(left: string, right: string) {
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+
+  if (Number.isNaN(leftTime)) {
+    return right
+  }
+
+  if (Number.isNaN(rightTime)) {
+    return left
+  }
+
+  return leftTime >= rightTime ? left : right
+}
+
 function getTwelveDataSymbol(instrument: MarketTapeInstrument) {
   if (instrument.kind === 'fx') {
     return `${instrument.fromSymbol}/${instrument.toSymbol}`
@@ -371,7 +478,7 @@ export default async function handler(_request: unknown, response: {
           ).catch(() => null)
         : null
 
-    const snapshot = mergeSnapshots(twelveSnapshot, alphaSnapshot)
+    const snapshot = projectTapeToCop(mergeSnapshots(twelveSnapshot, alphaSnapshot))
     response.setHeader('Cache-Control', `public, s-maxage=${CDN_CACHE_SECONDS}, stale-while-revalidate=${CDN_CACHE_SECONDS}`)
     response.status(200).json(snapshot)
   } catch (error) {

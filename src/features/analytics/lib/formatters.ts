@@ -1,5 +1,7 @@
 import type { HistoricStat, SnapshotRecord } from '../api/schemas'
 
+const ABSOLUTE_ONLY_METRICS = new Set(['spread', 'spread_bps'])
+
 export function formatNumber(value: number | null | undefined, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return 'n/a'
@@ -145,38 +147,40 @@ export function formatMetricValue(metricKey: string, value: number | null | unde
     return 'n/a'
   }
 
+  const normalizedValue = normalizeMetricForDisplay(metricKey, value)
+
   if (metricKey === 'daily_change_percent') {
-    return formatPercentFromWhole(value)
+    return formatPercentFromWhole(normalizedValue)
   }
   if (metricKey === 'spread_bps') {
-    return `${formatNumber(value)} bps`
+    return `${formatInteger(normalizedValue)} bps`
   }
   if (metricKey === 'spread') {
-    return formatInteger(value)
+    return formatInteger(normalizedValue)
   }
   if (metricKey === 'traded_value') {
-    return formatMillions(value, 1)
+    return formatMillions(normalizedValue, 1)
   }
   if (metricKey === 'traded_volume' || metricKey === 'value_rate') {
-    return formatMillionsWhenLarge(value, {
+    return formatMillionsWhenLarge(normalizedValue, {
       digits: 2,
       fallback: metricKey === 'value_rate' ? 'number' : 'integer',
     })
   }
   if (metricKey === 'vwap_cumulative' || metricKey === 'mid_price' || metricKey === 'microprice') {
-    return formatNumber(value)
+    return formatInteger(normalizedValue)
   }
   if (metricKey === 'best_bid_price' || metricKey === 'best_ask_price' || metricKey === 'high_price' || metricKey === 'low_price') {
-    return formatCurrency(value)
+    return formatCurrency(normalizedValue)
   }
   if (metricKey === 'last_price') {
-    return formatNumber(value)
+    return formatInteger(normalizedValue)
   }
   if (metricKey === 'obi_l1' || metricKey === 'obi_top_5' || metricKey === 'book_pressure_ratio') {
-    return formatNumber(value)
+    return formatNumber(normalizedValue)
   }
 
-  return formatNumber(value)
+  return formatNumber(normalizedValue)
 }
 
 export function formatBandDelta(metricKey: string, current: number | null | undefined, previous: number | null | undefined) {
@@ -191,10 +195,21 @@ export function formatBandDelta(metricKey: string, current: number | null | unde
     return 'No prior point'
   }
 
-  const delta = current - previous
+  const normalizedCurrent = normalizeMetricForDisplay(metricKey, current)
+  const normalizedPrevious = normalizeMetricForDisplay(metricKey, previous)
+  if (
+    normalizedCurrent === null ||
+    normalizedCurrent === undefined ||
+    normalizedPrevious === null ||
+    normalizedPrevious === undefined
+  ) {
+    return 'No prior point'
+  }
+
+  const delta = normalizedCurrent - normalizedPrevious
 
   if (metricKey === 'spread_bps') {
-    return `${delta >= 0 ? '+' : ''}${formatNumber(delta)} bps`
+    return `${delta >= 0 ? '+' : ''}${formatInteger(delta)} bps`
   }
 
   return `${delta >= 0 ? '+' : ''}${formatNumber(delta)}`
@@ -216,13 +231,32 @@ export function formatBandDeltaWithRelative(
     return 'No prior point'
   }
 
-  const absolute = formatBandDelta(metricKey, current, previous)
-  if (previous === 0) {
+  const normalizedCurrent = normalizeMetricForDisplay(metricKey, current)
+  const normalizedPrevious = normalizeMetricForDisplay(metricKey, previous)
+  if (
+    normalizedCurrent === null ||
+    normalizedCurrent === undefined ||
+    normalizedPrevious === null ||
+    normalizedPrevious === undefined
+  ) {
+    return 'No prior point'
+  }
+
+  const absolute = formatBandDelta(metricKey, normalizedCurrent, normalizedPrevious)
+  if (normalizedPrevious === 0) {
     return absolute
   }
 
-  const relative = ((current - previous) / previous) * 100
+  const relative = ((normalizedCurrent - normalizedPrevious) / normalizedPrevious) * 100
   return `${absolute} (${relative >= 0 ? '+' : ''}${formatNumber(relative)}%)`
+}
+
+export function normalizeMetricForDisplay(metricKey: string, value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return value
+  }
+
+  return ABSOLUTE_ONLY_METRICS.has(metricKey) ? Math.abs(value) : value
 }
 
 export function formatSampleCount(value: number | null | undefined) {

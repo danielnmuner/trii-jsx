@@ -29,8 +29,25 @@ export const invoicePersistResponseSchema = z.object({
 })
 
 export const stockOrdersLookupRecordSchema = z.object({
+  record_checksum: z.string().optional(),
+  source_file_checksum: z.string().optional(),
+  source_line_number: z.number().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  created_month: z.string().nullable().optional(),
   imported_at: z.string().nullable(),
   created_at_symbol: z.string().nullable(),
+  symbol: z.string().optional(),
+  order_side: z.string().nullable().optional(),
+  raw_status: z.string().nullable().optional(),
+  normalized_status: z.string().nullable().optional(),
+  requested_quantity: z.number().nullable().optional(),
+  filled_quantity: z.number().nullable().optional(),
+  pending_quantity: z.number().nullable().optional(),
+  price_per_share: z.number().nullable().optional(),
+  gross_amount: z.number().nullable().optional(),
+  commission_amount: z.number().nullable().optional(),
+  net_amount: z.number().nullable().optional(),
+  currency: z.string().nullable().optional(),
 })
 
 export const stockOrdersLookupResponseSchema = z.object({

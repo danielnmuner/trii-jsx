@@ -22,6 +22,7 @@ import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { formatInteger, formatPercentFromWhole } from '../lib/formatters'
+import { coreSortPresets, type CoreSortIntent } from '../lib/coreSymbolSorting'
 
 type AnalyticsHeroProps = {
   from?: string
@@ -53,11 +54,15 @@ export function AnalyticsHero({
 
 type AnalyticsFiltersProps = {
   orderedSymbols: string[]
+  heldSymbols: string[]
   latestBySymbol: Record<string, AnalyticsSymbolFeed['current_snapshot'] | undefined>
   selectedSymbols: string[]
   symbols: string[]
+  sortIntent: CoreSortIntent
   onSelectedSymbolsChange: (symbols: string[]) => void
   onSymbolOrderChange: (symbols: string[]) => void
+  onSortIntentChange: (intent: CoreSortIntent) => void
+  onOwnedSymbolsSelect: () => void
 }
 
 type SymbolChipTone = 'positive' | 'negative' | 'neutral'
@@ -72,15 +77,20 @@ type SymbolChipViewModel = {
 
 export function AnalyticsFilters({
   orderedSymbols,
+  heldSymbols,
   latestBySymbol,
   selectedSymbols,
   symbols,
+  sortIntent,
   onSelectedSymbolsChange,
   onSymbolOrderChange,
+  onSortIntentChange,
+  onOwnedSymbolsSelect,
 }: AnalyticsFiltersProps) {
   const selectedSet = new Set(selectedSymbols)
   const displaySymbols = orderedSymbols.length > 0 ? orderedSymbols : symbols
   const [activeDragSymbol, setActiveDragSymbol] = useState<string | null>(null)
+  const dragEnabled = sortIntent === 'manual'
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -137,6 +147,10 @@ export function AnalyticsFilters({
   }
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (!dragEnabled) {
+      return
+    }
+
     setActiveDragSymbol(String(event.active.id))
   }
 
@@ -145,7 +159,7 @@ export function AnalyticsFilters({
     const overId = event.over ? String(event.over.id) : null
     setActiveDragSymbol(null)
 
-    if (!overId || activeId === overId) {
+    if (!dragEnabled || !overId || activeId === overId) {
       return
     }
 
@@ -162,12 +176,37 @@ export function AnalyticsFilters({
     <section className="analytics-filterbar" aria-label="Primary filters">
       <div className="analytics-filterbar__group analytics-filterbar__group--core">
         <span className="analytics-filterbar__label">Core</span>
+        <div className="analytics-sortbar" role="tablist" aria-label="Core ranking">
+          {coreSortPresets.map((preset) => {
+            const isActive = preset.key === sortIntent
+            return (
+              <button
+                key={preset.key}
+                type="button"
+                className={clsx('analytics-sortbar__button', isActive && 'analytics-sortbar__button--active')}
+                onClick={() => onSortIntentChange(preset.key)}
+                aria-pressed={isActive}
+              >
+                {preset.label}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            className="analytics-sortbar__button analytics-sortbar__button--action"
+            onClick={onOwnedSymbolsSelect}
+            disabled={heldSymbols.length === 0}
+          >
+            Owned
+          </button>
+        </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <SortableContext items={displaySymbols} strategy={rectSortingStrategy}>
             <div className="symbol-chip-row">
               {displaySymbols.map((symbol) => (
                 <SortableSymbolChip
                   key={`core-${symbol}`}
+                  dragEnabled={dragEnabled}
                   model={chipModels[symbol]}
                   onToggle={toggleCoreSymbol}
                 />
@@ -176,7 +215,7 @@ export function AnalyticsFilters({
           </SortableContext>
 
           <DragOverlay>
-            {activeChip ? <SymbolChipCard model={activeChip} isDraggingOverlay /> : null}
+            {dragEnabled && activeChip ? <SymbolChipCard model={activeChip} isDraggingOverlay /> : null}
           </DragOverlay>
         </DndContext>
       </div>
@@ -185,9 +224,11 @@ export function AnalyticsFilters({
 }
 
 function SortableSymbolChip({
+  dragEnabled,
   model,
   onToggle,
 }: {
+  dragEnabled: boolean
   model: SymbolChipViewModel
   onToggle: (symbol: string) => void
 }) {
@@ -200,6 +241,7 @@ function SortableSymbolChip({
     isDragging,
   } = useSortable({
     id: model.symbol,
+    disabled: !dragEnabled,
   })
 
   const style = {
@@ -212,6 +254,7 @@ function SortableSymbolChip({
       <SymbolChipCard
         model={model}
         dragAttributes={attributes}
+        dragEnabled={dragEnabled}
         dragListeners={listeners}
         isDragging={isDragging}
         onToggle={onToggle}
@@ -223,6 +266,7 @@ function SortableSymbolChip({
 function SymbolChipCard({
   model,
   dragAttributes,
+  dragEnabled = true,
   dragListeners,
   isDragging = false,
   isDraggingOverlay = false,
@@ -230,6 +274,7 @@ function SymbolChipCard({
 }: {
   model: SymbolChipViewModel
   dragAttributes?: DraggableAttributes
+  dragEnabled?: boolean
   dragListeners?: ReturnType<typeof useSortable>['listeners']
   isDragging?: boolean
   isDraggingOverlay?: boolean
@@ -240,6 +285,7 @@ function SymbolChipCard({
       type="button"
       className={clsx(
         'symbol-chip',
+        !dragEnabled && 'symbol-chip--static',
         model.isSelected && 'symbol-chip--selected',
         isDragging && 'symbol-chip--dragging',
         isDraggingOverlay && 'symbol-chip--overlay',

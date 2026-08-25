@@ -1,4 +1,5 @@
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
+import type { OrderPositionSummary } from '../lib/orderPosition'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
 import { SymbolIdentity } from './SymbolIdentity'
@@ -12,6 +13,7 @@ import {
 
 type OverviewPanelProps = {
   snapshots: AnalyticsSymbolFeed[]
+  orderPositionsBySymbol?: Record<string, OrderPositionSummary | undefined>
 }
 
 type TapeTone = 'positive' | 'negative' | 'neutral'
@@ -40,7 +42,7 @@ type TapeItemData = {
   }>
 }
 
-export function OverviewPanel({ snapshots }: OverviewPanelProps) {
+export function OverviewPanel({ snapshots, orderPositionsBySymbol = {} }: OverviewPanelProps) {
   return (
     <section className="overview-stack" aria-label="Market overview">
       {snapshots.map((snapshot) => {
@@ -137,7 +139,7 @@ export function OverviewPanel({ snapshots }: OverviewPanelProps) {
 
             <div className="overview-tape overview-tape--market" role="group" aria-label={`${snapshot.symbol} market tape`}>
               <div className="overview-tape__row overview-tape__row--market">
-                <DeterministicSimulationTile snapshot={current} />
+                <DeterministicSimulationTile snapshot={current} positionSummary={orderPositionsBySymbol[snapshot.symbol]} />
               </div>
             </div>
           </article>

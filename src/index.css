@@ -411,6 +411,52 @@ button {
   overflow: hidden;
 }
 
+.analytics-sortbar {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.analytics-sortbar__button {
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.012);
+  color: rgba(244, 246, 248, 0.5);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.53rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.analytics-sortbar__button:hover {
+  color: rgba(244, 246, 248, 0.8);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.analytics-sortbar__button--active {
+  border-color: rgba(0, 255, 255, 0.2);
+  background: rgba(0, 255, 255, 0.07);
+  color: rgba(165, 247, 255, 0.94);
+}
+
+.analytics-sortbar__button--action:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .analytics-filterbar__label {
   flex: 0 0 auto;
   color: var(--text-faint);
@@ -464,6 +510,11 @@ button {
   border-color: var(--line-strong);
   color: var(--text);
   transform: translateY(-1px);
+}
+
+.symbol-chip--static {
+  cursor: pointer;
+  touch-action: auto;
 }
 
 .symbol-chip--selected {
@@ -1184,6 +1235,8 @@ button {
   min-width: 0;
   display: grid;
   grid-template-columns:
+    minmax(92px, 0.54fr)
+    1px
     minmax(0, 1.55fr)
     1px
     minmax(0, 1.55fr)
@@ -1209,6 +1262,67 @@ button {
   background-repeat: repeat-y;
   background-position: center;
   opacity: 0.72;
+}
+
+.overview-sim__positionCard {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.overview-sim__positionHead {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.overview-sim__positionBody {
+  display: grid;
+  gap: 3px;
+}
+
+.overview-sim__positionBlock {
+  display: grid;
+  gap: 1px;
+}
+
+.overview-sim__positionCaption,
+.overview-sim__positionSub {
+  color: rgba(210, 222, 238, 0.52);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.46rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overview-sim__positionValue,
+.overview-sim__positionDelta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.overview-sim__positionValue {
+  color: rgba(236, 244, 255, 0.92);
+}
+
+.overview-sim__positionValue--positive,
+.overview-sim__positionDelta--positive {
+  color: var(--positive);
+}
+
+.overview-sim__positionValue--negative,
+.overview-sim__positionDelta--negative {
+  color: var(--negative);
+}
+
+.overview-sim__positionValue--neutral,
+.overview-sim__positionDelta--neutral {
+  color: rgba(236, 244, 255, 0.92);
 }
 
 .overview-sim__chartCard {
@@ -3959,8 +4073,65 @@ button {
     display: none;
   }
 
+  .overview-sim__positionCard {
+    gap: 5px;
+  }
+
+  .overview-sim__positionValue,
+  .overview-sim__positionDelta {
+    font-size: 0.62rem;
+  }
+
+  .overview-sim__positionCaption,
+  .overview-sim__positionSub {
+    font-size: 0.46rem;
+  }
+
+  .overview-sim__chartMeta {
+    gap: 6px;
+  }
+
+  .overview-sim__activeMetaPrice {
+    font-size: 0.52rem;
+  }
+
+  .overview-sim__activeMetaDelta {
+    font-size: 0.5rem;
+  }
+
+  .overview-sim__targetSwitch {
+    gap: 5px;
+  }
+
+  .overview-sim__targetButton {
+    font-size: 0.5rem;
+  }
+
+  .overview-sim__tableCard {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .overview-sim__table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .overview-sim__table th,
+  .overview-sim__table td {
+    padding: 3px 4px;
+  }
+
+  .overview-sim__table tbody th {
+    width: 34%;
+    padding-right: 5px;
+    font-size: 0.5rem;
+  }
+
   .overview-sim__cell {
-    font-size: 0.56rem;
+    font-size: 0.52rem;
+    letter-spacing: 0.02em;
   }
 
   .historic-stats-card {

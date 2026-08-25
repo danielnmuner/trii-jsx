@@ -1,14 +1,7 @@
 import type { ZscoreOpportunityRecord } from '../api/schemas'
+import { extractApprovedPositionSummary, type ApprovedPositionSummary } from './positionSummary'
 
 type JsonLike = null | boolean | number | string | JsonLike[] | { [key: string]: JsonLike }
-
-type ApprovedPositionSummary = {
-  approved_buy_quantity?: number | null
-  approved_sell_quantity?: number | null
-  available_quantity?: number | null
-  symbol?: string | null
-  weighted_average_price?: number | null
-}
 
 type OrderBookLevel = {
   level?: number | null
@@ -233,21 +226,6 @@ function orderReadablePayload(payload: Record<string, JsonLike>) {
   }
 
   return Object.fromEntries(ordered)
-}
-
-function extractApprovedPositionSummary(value: unknown): ApprovedPositionSummary | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-
-  const summary = value as Record<string, unknown>
-  return {
-    approved_buy_quantity: toOptionalNumber(summary.approved_buy_quantity),
-    approved_sell_quantity: toOptionalNumber(summary.approved_sell_quantity),
-    available_quantity: toOptionalNumber(summary.available_quantity),
-    symbol: typeof summary.symbol === 'string' ? summary.symbol : null,
-    weighted_average_price: toOptionalNumber(summary.weighted_average_price),
-  }
 }
 
 function extractOrderBookLevels(value: unknown): OrderBookLevel[] {

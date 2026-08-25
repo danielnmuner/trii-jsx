@@ -77,7 +77,7 @@ function findSeasonalityProfile(records: Array<HistoricStat | SeasonalityProfile
   )
 }
 
-export function useZscoreOpportunityWindows(symbols: string[], tradingDate: string | null) {
+export function useZscoreOpportunityWindows(symbols: string[], tradingDate: string | null, enabled = true) {
   const anchorDate = tradingDate ?? ''
   const previousDate = tradingDate ? toPreviousDate(tradingDate) : ''
 
@@ -99,7 +99,7 @@ export function useZscoreOpportunityWindows(symbols: string[], tradingDate: stri
       },
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
-      enabled: Boolean(symbol && anchorDate),
+      enabled: enabled && Boolean(symbol && anchorDate),
     })),
   })
 
@@ -120,7 +120,7 @@ export function useZscoreOpportunityWindows(symbols: string[], tradingDate: stri
   }, [queries])
 }
 
-export function useDailyClosingSnapshots(symbols: string[]) {
+export function useDailyClosingSnapshots(symbols: string[], enabled = true) {
   const queries = useQueries({
     queries: symbols.map((symbol) => ({
       queryKey: ['analytics', 'daily-closing', symbol],
@@ -134,7 +134,7 @@ export function useDailyClosingSnapshots(symbols: string[]) {
       },
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
-      enabled: Boolean(symbol),
+      enabled: enabled && Boolean(symbol),
     })),
   })
 

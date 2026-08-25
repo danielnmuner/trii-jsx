@@ -1,10 +1,12 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SnapshotRecord } from '../api/schemas'
+import type { OrderPositionSummary } from '../lib/orderPosition'
 import { formatInteger } from '../lib/formatters'
 
 type DeterministicSimulationTileProps = {
   snapshot: SnapshotRecord
+  positionSummary?: OrderPositionSummary
 }
 
 type PriceScenario = {
@@ -63,7 +65,7 @@ const CHART_WIDTH = 420
 const CHART_HEIGHT = 110
 const CHART_PADDING = { top: 22, right: 28, bottom: 18, left: 24 }
 
-export function DeterministicSimulationTile({ snapshot }: DeterministicSimulationTileProps) {
+export function DeterministicSimulationTile({ snapshot, positionSummary }: DeterministicSimulationTileProps) {
   const bidGradientId = useId().replace(/:/g, '')
   const askGradientId = `${bidGradientId}-ask`
   const bidScenarios = useMemo(() => buildBidScenarios(snapshot), [snapshot])
@@ -97,6 +99,13 @@ export function DeterministicSimulationTile({ snapshot }: DeterministicSimulatio
     () =>
       PROFIT_TARGETS.map((targetProfit) =>
         solveOptimizedTargetScenario({
+          bidPrice: activeBid?.price ?? 0,
+          targetProfit,
+          askMin: resolveAskMinimum(snapshot),
+          askMax: resolveAskMaximum(snapshot),
+          maxInvestmentAmount: activeInvestmentCap,
+        }) ??
+        buildFallbackScenario({
           bidPrice: activeBid?.price ?? 0,
           targetProfit,
           askMin: resolveAskMinimum(snapshot),
@@ -138,6 +147,10 @@ export function DeterministicSimulationTile({ snapshot }: DeterministicSimulatio
   return (
     <section className="overview-tape__item overview-tape__item--market overview-tape__item--simulation" aria-label="Deterministic trade simulation">
       <div className="overview-sim">
+        <PositionSnapshotCard snapshot={snapshot} positionSummary={positionSummary} />
+
+        <div className="overview-sim__sectionDivider" aria-hidden="true" />
+
         <PriceChart
           title="Bid"
           axisStart={formatInteger(bidScenarios[0]?.price)}
@@ -241,6 +254,48 @@ export function DeterministicSimulationTile({ snapshot }: DeterministicSimulatio
         </div>
       </div>
     </section>
+  )
+}
+
+function PositionSnapshotCard({
+  snapshot,
+  positionSummary,
+}: {
+  snapshot: SnapshotRecord
+  positionSummary?: OrderPositionSummary
+}) {
+  const quantity = positionSummary?.availableQuantity ?? 0
+  const weightedAveragePrice = positionSummary?.weightedAveragePrice ?? null
+  const deltaValue = positionSummary?.deltaValue ?? null
+  const deltaPct = positionSummary?.deltaPct ?? null
+  const tone = deltaValue === null ? 'neutral' : deltaValue >= 0 ? 'positive' : 'negative'
+
+  return (
+    <div className="overview-sim__positionCard">
+      <div className="overview-sim__positionHead">
+        <span className="overview-sim__metricLabel">Inventory</span>
+      </div>
+
+      <div className="overview-sim__positionBody">
+        <div className="overview-sim__positionBlock">
+          <span className="overview-sim__positionCaption">Average</span>
+          <strong className={`overview-sim__positionValue overview-sim__positionValue--${tone}`}>
+            {weightedAveragePrice === null ? '--' : formatInteger(weightedAveragePrice)}
+          </strong>
+        </div>
+
+        <div className="overview-sim__positionBlock">
+          <span className="overview-sim__positionCaption">Qty</span>
+          <strong className="overview-sim__positionValue">{formatInteger(quantity)}</strong>
+        </div>
+      </div>
+
+      <div className={`overview-sim__positionDelta overview-sim__positionDelta--${tone}`}>
+        {deltaValue === null || deltaPct === null ? '--' : `${formatSignedInteger(deltaValue)} (${formatSignedPercent(deltaPct)})`}
+      </div>
+
+      <div className="overview-sim__positionSub">vs last {formatInteger(snapshot.last_price)}</div>
+    </div>
   )
 }
 
@@ -418,11 +473,22 @@ function SimulationDetailRow({
 }
 
 function buildBidScenarios(snapshot: SnapshotRecord) {
-  const lowPrice = resolveRoundedPrice(snapshot.low_price)
+  const availablePrices = resolveAvailableRoundedPrices(snapshot)
+  if (availablePrices.length === 0) {
+    return []
+  }
+
+  const lowPrice = resolveRoundedPrice(snapshot.low_price) || Math.min(...availablePrices)
   const microPrice = resolveRoundedPrice(snapshot.microprice)
   const bestBidPrice = resolveRoundedPrice(snapshot.best_bid_price)
-  const highBid = Math.max(microPrice, bestBidPrice, resolveRoundedPrice(snapshot.mid_price), resolveRoundedPrice(snapshot.last_price))
-  const defaultBid = bestBidPrice || Math.max(microPrice, bestBidPrice)
+  const highBid = Math.max(
+    microPrice,
+    bestBidPrice,
+    resolveRoundedPrice(snapshot.mid_price),
+    resolveRoundedPrice(snapshot.last_price),
+    ...availablePrices,
+  )
+  const defaultBid = bestBidPrice || Math.max(microPrice, bestBidPrice, resolveRoundedPrice(snapshot.last_price))
 
   if (!lowPrice || !highBid || highBid < lowPrice) {
     return []
@@ -451,6 +517,36 @@ function buildAskScenarios(snapshot: SnapshotRecord) {
     deltaValue: price - lowAsk,
     deltaPct: lowAsk > 0 ? ((price - lowAsk) / lowAsk) * 100 : 0,
   }))
+}
+
+function buildFallbackScenario({
+  bidPrice,
+  targetProfit,
+  askMin,
+  askMax,
+  maxInvestmentAmount,
+}: {
+  bidPrice: number
+  targetProfit: number
+  askMin: number
+  askMax: number
+  maxInvestmentAmount: number
+}): SimulationScenario | null {
+  if (bidPrice <= 0) {
+    return null
+  }
+
+  const boundedCap = Math.max(bidPrice, maxInvestmentAmount)
+  const quantity = Math.max(1, Math.floor(boundedCap / bidPrice))
+  const askPrice = Math.max(askMin, askMax, bidPrice)
+
+  return buildScenarioTotals({
+    targetProfit,
+    quantity,
+    bidPrice,
+    askPrice,
+    isFeasible: false,
+  })
 }
 
 function buildPriceRange(start: number, end: number, count: number, anchors: number[] = []) {
@@ -891,8 +987,30 @@ function resolveRoundedPrice(value: number | null | undefined) {
   return Math.max(1, Math.round(value))
 }
 
+function resolveAvailableRoundedPrices(snapshot: SnapshotRecord) {
+  return [
+    snapshot.low_price,
+    snapshot.best_bid_price,
+    snapshot.mid_price,
+    snapshot.microprice,
+    snapshot.last_price,
+    snapshot.best_ask_price,
+    snapshot.high_price,
+  ]
+    .map((value) => resolveRoundedPrice(value))
+    .filter((value) => value > 0)
+}
+
 function resolveAskMinimum(snapshot: SnapshotRecord) {
-  const candidates = [snapshot.best_bid_price, snapshot.microprice, snapshot.last_price]
+  const candidates = [
+    snapshot.best_bid_price,
+    snapshot.microprice,
+    snapshot.last_price,
+    snapshot.best_ask_price,
+    snapshot.mid_price,
+    snapshot.low_price,
+    snapshot.high_price,
+  ]
     .map((value) => resolveRoundedPrice(value))
     .filter((value) => value > 0)
 
@@ -904,12 +1022,23 @@ function resolveAskMinimum(snapshot: SnapshotRecord) {
 }
 
 function resolveAskMaximum(snapshot: SnapshotRecord) {
-  const highPrice = resolveRoundedPrice(snapshot.high_price)
-  if (!highPrice) {
+  const candidates = [
+    snapshot.high_price,
+    snapshot.best_ask_price,
+    snapshot.microprice,
+    snapshot.last_price,
+    snapshot.mid_price,
+    snapshot.best_bid_price,
+    snapshot.low_price,
+  ]
+    .map((value) => resolveRoundedPrice(value))
+    .filter((value) => value > 0)
+
+  if (candidates.length === 0) {
     return 0
   }
 
-  return highPrice
+  return Math.max(...candidates)
 }
 
 function resolveChartAskLossCutoff(bidPrice: number) {

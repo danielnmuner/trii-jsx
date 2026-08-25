@@ -74,4 +74,34 @@ describe('rankCoreSymbols', () => {
 
     expect(ordered).toEqual(['BBB', 'CCC', 'AAA'])
   })
+
+  it('sorts by most recent capture first for recent intent', () => {
+    const ordered = rankCoreSymbols({
+      baseOrder: ['AAA', 'BBB', 'CCC'],
+      latestBySymbol: {
+        AAA: createSnapshot({ symbol: 'AAA', captured_at: '2026-08-25T10:01:00-05:00' }),
+        BBB: createSnapshot({ symbol: 'BBB', captured_at: '2026-08-25T10:05:00-05:00' }),
+        CCC: createSnapshot({ symbol: 'CCC', captured_at: '2026-08-25T09:59:00-05:00' }),
+      },
+      latestZscoreBySymbol: {},
+      intent: 'recent',
+    })
+
+    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
+  })
+
+  it('sorts by traded value descending for value intent', () => {
+    const ordered = rankCoreSymbols({
+      baseOrder: ['AAA', 'BBB', 'CCC'],
+      latestBySymbol: {
+        AAA: createSnapshot({ symbol: 'AAA', traded_value: 900_000_000 }),
+        BBB: createSnapshot({ symbol: 'BBB', traded_value: 4_200_000_000 }),
+        CCC: createSnapshot({ symbol: 'CCC', traded_value: 1_700_000_000 }),
+      },
+      latestZscoreBySymbol: {},
+      intent: 'value',
+    })
+
+    expect(ordered).toEqual(['BBB', 'CCC', 'AAA'])
+  })
 })

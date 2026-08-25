@@ -4,10 +4,12 @@ import { extractApprovedPositionSummary } from './positionSummary'
 export const coreSortPresets = [
   { key: 'manual', label: 'Manual' },
   { key: 'held', label: 'Held' },
+  { key: 'value', label: 'Most Traded' },
   { key: 'up', label: 'Up %' },
   { key: 'down', label: 'Down %' },
   { key: 'tight', label: 'Tight' },
   { key: 'wide', label: 'Wide' },
+  { key: 'recent', label: 'Recent' },
 ] as const
 
 export type CoreSortIntent = (typeof coreSortPresets)[number]['key']
@@ -92,6 +94,14 @@ function compareSymbolsByIntent({
     return compareNumbersAsc(latestBySymbol[left]?.spread_bps, latestBySymbol[right]?.spread_bps)
   }
 
+  if (intent === 'recent') {
+    return compareTimestampsDesc(latestBySymbol[left]?.captured_at, latestBySymbol[right]?.captured_at)
+  }
+
+  if (intent === 'value') {
+    return compareNumbersDesc(latestBySymbol[left]?.traded_value, latestBySymbol[right]?.traded_value)
+  }
+
   return compareNumbersDesc(latestBySymbol[left]?.spread_bps, latestBySymbol[right]?.spread_bps)
 }
 
@@ -127,4 +137,17 @@ function normalizeNumber(value: number | null | undefined) {
 
 function normalizeNumberDesc(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY
+}
+
+function compareTimestampsDesc(left: string | null | undefined, right: string | null | undefined) {
+  return normalizeTimestamp(right) - normalizeTimestamp(left)
+}
+
+function normalizeTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
 }

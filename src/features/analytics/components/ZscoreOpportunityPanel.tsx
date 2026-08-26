@@ -30,7 +30,7 @@ const zscoreMetricLabels: Record<(typeof zscoreMetricOrder)[number], string> = {
   traded_volume: 'Traded Volume',
 }
 
-const zoomHoursOptions = [6, 12, 24, 48] as const
+const zoomHoursOptions = [6, 12, 24, 48, 72] as const
 
 function shouldHighlightOpportunityValueBar(record: ZscoreOpportunityRecord) {
   const obiL1Zscore = record.triggered_z_scores?.obi_l1?.z_score
@@ -44,6 +44,11 @@ function shouldHighlightOpportunityValueBar(record: ZscoreOpportunityRecord) {
 function resolveLevelOnePrice(levels: ZscoreOpportunityRecord['bid_levels'] | ZscoreOpportunityRecord['ask_levels']) {
   const price = levels?.[0]?.price
   return typeof price === 'number' && !Number.isNaN(price) ? price : null
+}
+
+function resolveLevelOneQuantity(levels: ZscoreOpportunityRecord['bid_levels'] | ZscoreOpportunityRecord['ask_levels']) {
+  const quantity = levels?.[0]?.quantity
+  return typeof quantity === 'number' && !Number.isNaN(quantity) ? quantity : null
 }
 
 function resolveBestBidPrice(record: ZscoreOpportunityRecord) {
@@ -66,6 +71,62 @@ function resolveOpportunityTradedValue(record: ZscoreOpportunityRecord) {
   return typeof sampleValue === 'number' && !Number.isNaN(sampleValue) ? sampleValue : 0
 }
 
+function resolveOpportunityTradedVolume(record: ZscoreOpportunityRecord) {
+  if (typeof record.traded_volume === 'number' && !Number.isNaN(record.traded_volume)) {
+    return record.traded_volume
+  }
+  const sampleValue = record.triggered_z_scores?.traded_volume?.sample_value
+  return typeof sampleValue === 'number' && !Number.isNaN(sampleValue) ? sampleValue : null
+}
+
+function resolveOpportunityMicroprice(record: ZscoreOpportunityRecord) {
+  const value = (record as Record<string, unknown>).microprice
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    return value
+  }
+
+  const midPrice = (record as Record<string, unknown>).mid_price
+  if (typeof midPrice === 'number' && !Number.isNaN(midPrice)) {
+    return midPrice
+  }
+
+  const bestBidPrice = resolveBestBidPrice(record)
+  const bestAskPrice = resolveBestAskPrice(record)
+  const bidQuantity = resolveLevelOneQuantity(record.bid_levels)
+  const askQuantity = resolveLevelOneQuantity(record.ask_levels)
+
+  if (
+    bestBidPrice !== null &&
+    bestAskPrice !== null &&
+    bidQuantity !== null &&
+    askQuantity !== null &&
+    bidQuantity + askQuantity > 0
+  ) {
+    return ((bidQuantity * bestAskPrice) + (askQuantity * bestBidPrice)) / (bidQuantity + askQuantity)
+  }
+
+  if (bestBidPrice !== null && bestAskPrice !== null) {
+    return (bestBidPrice + bestAskPrice) / 2
+  }
+
+  if (typeof record.last_price === 'number' && !Number.isNaN(record.last_price)) {
+    return record.last_price
+  }
+
+  return null
+}
+
+function resolveOpportunitySpread(record: ZscoreOpportunityRecord) {
+  const bestBidPrice = resolveBestBidPrice(record)
+  const bestAskPrice = resolveBestAskPrice(record)
+
+  if (bestBidPrice === null || bestAskPrice === null) {
+    return null
+  }
+
+  return Math.abs(bestAskPrice - bestBidPrice)
+}
+
 export function ZscoreOpportunityPanel({ windows }: ZscoreOpportunityPanelProps) {
   const visibleWindows = windows.filter((window) => window.records.length > 0)
 
@@ -80,7 +141,7 @@ export function ZscoreOpportunityPanel({ windows }: ZscoreOpportunityPanelProps)
 
 function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
   const [activeChecksum, setActiveChecksum] = useState<string | null>(null)
-  const [rangeHours, setRangeHours] = useState<(typeof zoomHoursOptions)[number]>(48)
+  const [rangeHours, setRangeHours] = useState<(typeof zoomHoursOptions)[number]>(24)
   const [copyState, setCopyState] = useState<{ key: string; status: 'copied' | 'error' } | null>(null)
 
   const filteredRecords = useMemo(() => {
@@ -406,16 +467,16 @@ function ZscorePointTooltip({
       ? recordWithBucketRange.bucket_max_last_price_10m
       : null
   const bucketRangeTone = bucketMin !== null && bucketMax !== null && bucketMin === bucketMax ? 'flat' : 'range'
-  const pointMetrics = zscoreMetricOrder
-    .map((metricKey) => ({
-      metricKey,
-      metric: record.triggered_z_scores?.[metricKey],
-    }))
-    .filter((entry) => entry.metric)
+  const bestAskPrice = resolveBestAskPrice(record)
+  const bestBidPrice = resolveBestBidPrice(record)
+  const microprice = resolveOpportunityMicroprice(record)
+  const spread = resolveOpportunitySpread(record)
+  const tradedValue = resolveOpportunityTradedValue(record)
+  const tradedVolume = resolveOpportunityTradedVolume(record)
   const alignRight = point.x > 436
   const alignBelow = point.y < 110
   const tooltipWidth = 214
-  const tooltipHeight = 134
+  const tooltipHeight = 174
   const horizontalStyle = alignRight
     ? `clamp(8px, calc(${((point.x / 640) * 100).toFixed(3)}% - ${tooltipWidth + 12}px), calc(100% - ${tooltipWidth + 8}px))`
     : `clamp(8px, ${((point.x / 640) * 100).toFixed(3)}%, calc(100% - ${tooltipWidth + 8}px))`
@@ -450,24 +511,25 @@ function ZscorePointTooltip({
       <div className={`zscore-tooltip__delta zscore-tooltip__delta--${dailyChangeTone}`}>
         {formatMetricValue('last_price', record.daily_change_amount)} ({formatPercentFromWhole(record.daily_change_percent)})
       </div>
-      {pointMetrics.length > 0 ? (
-        <div className="zscore-tooltip__metrics">
-          {pointMetrics.map(({ metricKey, metric }) => {
-            const zScore = metric?.z_score
-            return (
-              <div key={metricKey} className="zscore-tooltip__metric">
-                <div className="zscore-tooltip__metricHead">
-                  <span className="zscore-tooltip__metricSample">{formatSampleMetric(metricKey, metric?.sample_value)}</span>
-                  <strong className="zscore-tooltip__metricZ">
-                    ({typeof zScore === 'number' ? `${zScore >= 0 ? '+' : ''}${formatNumber(zScore)}${`\u03c3`}` : 'n/a'})
-                  </strong>
-                </div>
-                <span className="zscore-tooltip__metricLabel">{zscoreMetricLabels[metricKey]}</span>
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
+      <div className="zscore-tooltip__snapshotGrid">
+        <SnapshotMetric label="High" value={formatMetricValue('high_price', record.high_price)} />
+        <SnapshotMetric label="Low" value={formatMetricValue('low_price', record.low_price)} />
+        <SnapshotMetric label="Best ask" value={formatMetricValue('best_ask_price', bestAskPrice)} />
+        <SnapshotMetric label="Best bid" value={formatMetricValue('best_bid_price', bestBidPrice)} />
+        <SnapshotMetric label="Microprice" value={formatMetricValue('microprice', microprice)} />
+        <SnapshotMetric label="Spread" value={formatMetricValue('spread', spread)} />
+        <SnapshotMetric label="Traded volume" value={formatMetricValue('traded_volume', tradedVolume)} />
+        <SnapshotMetric label="Traded value" value={formatMetricValue('traded_value', tradedValue)} />
+      </div>
+    </div>
+  )
+}
+
+function SnapshotMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="zscore-tooltip__snapshotMetric">
+      <span className="zscore-tooltip__snapshotLabel">{label}</span>
+      <strong className="zscore-tooltip__snapshotValue">{value}</strong>
     </div>
   )
 }
@@ -720,21 +782,6 @@ function computeDynamicBarWidth(xs: number[], chartWidth: number) {
   }
 
   return Math.max(1.1, minGap * 0.72)
-}
-
-function formatSampleMetric(metricKey: (typeof zscoreMetricOrder)[number], value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return 'n/a'
-  }
-
-  if (metricKey === 'traded_value') {
-    return formatMagnitude(value)
-  }
-  if (metricKey === 'traded_volume') {
-    return formatMagnitude(value)
-  }
-
-  return formatMetricValue(metricKey, value)
 }
 
 function formatMagnitude(value: number) {

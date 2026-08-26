@@ -3,6 +3,7 @@ import type { OrderPositionSummary } from '../lib/orderPosition'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
 import { SymbolIdentity } from './SymbolIdentity'
+import { deriveFreshnessTone, formatFreshnessTimestamp } from '../lib/freshness'
 import { buildOverviewQualitativeOpenAiUrl } from '../lib/overviewOpenAiPrompt'
 import {
   computeCumulativeVwap,
@@ -408,46 +409,4 @@ function isBestBidCrossingAsk(bestBid: number | null | undefined, bestAsk: numbe
   }
 
   return bestBid > bestAsk
-}
-
-function formatFreshnessTimestamp(value: string | null | undefined) {
-  if (!value) {
-    return 'n/a'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return 'n/a'
-  }
-
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Bogota',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-
-  const parts = Object.fromEntries(
-    formatter.formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-
-  return `${parts.month ?? '--'}-${parts.day ?? '--'} ${parts.hour ?? '--'}:${parts.minute ?? '--'}`
-}
-
-function deriveFreshnessTone(value: string | null | undefined): BadgeTone {
-  if (!value) {
-    return 'stale'
-  }
-
-  const capturedAt = new Date(value).getTime()
-  if (Number.isNaN(capturedAt)) {
-    return 'stale'
-  }
-
-  const diffMs = Math.max(0, Date.now() - capturedAt)
-  return diffMs <= 5 * 60 * 1000 ? 'fresh' : 'stale'
 }

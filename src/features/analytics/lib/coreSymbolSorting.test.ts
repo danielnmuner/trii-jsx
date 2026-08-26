@@ -145,6 +145,77 @@ describe('rankCoreSymbols', () => {
     expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
   })
 
+  it('prioritizes symbols whose default profit scenario reaches 100K and sorts them by red ask-loss span ascending', () => {
+    const ordered = rankCoreSymbols({
+      baseOrder: ['AAA', 'BBB', 'CCC'],
+      latestBySymbol: {
+        AAA: createFeed({
+          snapshot: {
+            symbol: 'AAA',
+            low_price: 100,
+            best_bid_price: 105,
+            mid_price: 106,
+            microprice: 106,
+            last_price: 106,
+            best_ask_price: 107,
+            high_price: 115,
+          },
+        }),
+        BBB: createFeed({
+          snapshot: {
+            symbol: 'BBB',
+            low_price: 1_000,
+            best_bid_price: 1_050,
+            mid_price: 1_060,
+            microprice: 1_060,
+            last_price: 1_060,
+            best_ask_price: 1_070,
+            high_price: 1_200,
+          },
+        }),
+        CCC: createFeed({
+          snapshot: {
+            symbol: 'CCC',
+            low_price: 100,
+            best_bid_price: 105,
+            mid_price: 105,
+            microprice: 105,
+            last_price: 105,
+            best_ask_price: 105,
+            high_price: 106,
+          },
+        }),
+      },
+      intent: 'profit',
+    })
+
+    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
+  })
+
+  it('does not throw when profit sorting receives symbols without a snapshot yet', () => {
+    const ordered = rankCoreSymbols({
+      baseOrder: ['AAA', 'BBB'],
+      latestBySymbol: {
+        AAA: undefined,
+        BBB: createFeed({
+          snapshot: {
+            symbol: 'BBB',
+            low_price: 1_000,
+            best_bid_price: 1_050,
+            mid_price: 1_060,
+            microprice: 1_060,
+            last_price: 1_060,
+            best_ask_price: 1_070,
+            high_price: 1_200,
+          },
+        }),
+      },
+      intent: 'profit',
+    })
+
+    expect(ordered).toEqual(['BBB', 'AAA'])
+  })
+
   it('collects only symbols with a traded flow z-score above the threshold', () => {
     const activeSymbols = collectFlowSignalSymbols({
       symbols: ['AAA', 'BBB', 'CCC'],

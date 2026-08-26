@@ -2,6 +2,23 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SnapshotRecord } from '../api/schemas'
 import type { OrderPositionSummary } from '../lib/orderPosition'
+import {
+  ALERT_AMOUNT_THRESHOLD,
+  buildFallbackScenario,
+  computeNetProfit,
+  DEFAULT_INVESTMENT_CAP,
+  DEFAULT_PROFIT_TARGET,
+  INVESTMENT_CAPS,
+  PROFIT_TARGETS,
+  resolveAskMaximum,
+  resolveAskMinimum,
+  resolveChartAskLossCutoff,
+  resolveDefaultBidPrice,
+  resolveRoundedPrice,
+  solveOptimizedTargetScenario,
+  STOP_LOSS_TARGETS,
+  type SimulationScenario,
+} from '../lib/deterministicSimulation'
 import { formatInteger } from '../lib/formatters'
 
 type DeterministicSimulationTileProps = {
@@ -13,17 +30,6 @@ type PriceScenario = {
   price: number
   deltaValue: number
   deltaPct: number
-}
-
-type SimulationScenario = {
-  targetProfit: number
-  quantity: number
-  askPrice: number
-  buyTotal: number
-  sellTotal: number
-  commissionCost: number
-  totalResult: number
-  isFeasible: boolean
 }
 
 type LossReviewScenario = {
@@ -53,14 +59,7 @@ type ChartSummary = {
   tertiary?: string
 }
 
-const PROFIT_TARGETS = [100_000, 200_000, 300_000] as const
 const POINT_COUNT = 16
-const MAX_QUANTITY_SEARCH = 2_000_000
-const ALERT_AMOUNT_THRESHOLD = 15_000_000
-const MIN_INVESTMENT_AMOUNT = 5_000_000
-const INVESTMENT_CAPS = [5_000_000, 10_000_000, 15_000_000] as const
-const STOP_LOSS_TARGETS = [50_000, 100_000, 150_000, 200_000] as const
-const TRII_PRO_VARIABLE_RATE = 0.0014875
 const CHART_WIDTH = 420
 const CHART_HEIGHT = 110
 const CHART_PADDING = { top: 22, right: 28, bottom: 18, left: 24 }
@@ -71,18 +70,13 @@ export function DeterministicSimulationTile({ snapshot, positionSummary }: Deter
   const bidScenarios = useMemo(() => buildBidScenarios(snapshot), [snapshot])
   const askScenarios = useMemo(() => buildAskScenarios(snapshot), [snapshot])
 
-  const defaultBidPrice = useMemo(
-    () =>
-      resolveRoundedPrice(snapshot.best_bid_price) ||
-      Math.max(resolveRoundedPrice(snapshot.microprice), resolveRoundedPrice(snapshot.best_bid_price)),
-    [snapshot.best_bid_price, snapshot.microprice],
-  )
+  const defaultBidPrice = useMemo(() => resolveDefaultBidPrice(snapshot), [snapshot])
   const defaultBidIndex = useMemo(() => getDefaultIndex(bidScenarios, defaultBidPrice), [bidScenarios, defaultBidPrice])
 
   const [activeBidIndex, setActiveBidIndex] = useState(defaultBidIndex)
   const [hoveredAskIndex, setHoveredAskIndex] = useState<number | null>(null)
-  const [activeTargetProfit, setActiveTargetProfit] = useState<(typeof PROFIT_TARGETS)[number]>(PROFIT_TARGETS[0])
-  const [activeInvestmentCap, setActiveInvestmentCap] = useState<(typeof INVESTMENT_CAPS)[number]>(INVESTMENT_CAPS[2])
+  const [activeTargetProfit, setActiveTargetProfit] = useState<(typeof PROFIT_TARGETS)[number]>(DEFAULT_PROFIT_TARGET)
+  const [activeInvestmentCap, setActiveInvestmentCap] = useState<(typeof INVESTMENT_CAPS)[number]>(DEFAULT_INVESTMENT_CAP)
 
   useEffect(() => {
     setActiveBidIndex(defaultBidIndex)
@@ -130,7 +124,7 @@ export function DeterministicSimulationTile({ snapshot, positionSummary }: Deter
 
   useEffect(() => {
     if (!optimizedScenarios.some((scenario) => scenario.targetProfit === activeTargetProfit)) {
-      setActiveTargetProfit(PROFIT_TARGETS[0])
+      setActiveTargetProfit(DEFAULT_PROFIT_TARGET)
     }
   }, [activeTargetProfit, optimizedScenarios])
 
@@ -525,36 +519,6 @@ function buildAskScenarios(snapshot: SnapshotRecord) {
   }))
 }
 
-function buildFallbackScenario({
-  bidPrice,
-  targetProfit,
-  askMin,
-  askMax,
-  maxInvestmentAmount,
-}: {
-  bidPrice: number
-  targetProfit: number
-  askMin: number
-  askMax: number
-  maxInvestmentAmount: number
-}): SimulationScenario | null {
-  if (bidPrice <= 0) {
-    return null
-  }
-
-  const boundedCap = Math.max(bidPrice, maxInvestmentAmount)
-  const quantity = Math.max(1, Math.floor(boundedCap / bidPrice))
-  const askPrice = Math.max(askMin, askMax, bidPrice)
-
-  return buildScenarioTotals({
-    targetProfit,
-    quantity,
-    bidPrice,
-    askPrice,
-    isFeasible: false,
-  })
-}
-
 function buildPriceRange(start: number, end: number, count: number, anchors: number[] = []) {
   if (count <= 1 || start === end) {
     return [start]
@@ -577,223 +541,6 @@ function buildPriceRange(start: number, end: number, count: number, anchors: num
 
   return Array.from(values).sort((left, right) => left - right)
 }
-
-function solveOptimizedTargetScenario({
-  bidPrice,
-  targetProfit,
-  askMin,
-  askMax,
-  maxInvestmentAmount,
-}: {
-  bidPrice: number
-  targetProfit: number
-  askMin: number
-  askMax: number
-  maxInvestmentAmount: number
-}): SimulationScenario | null {
-  const baseScenario = solveMinimumQuantityBaseScenario({
-    bidPrice,
-    targetProfit,
-    askMin,
-    askMax,
-  })
-
-  if (!baseScenario) {
-    return null
-  }
-
-  return (
-    refineScenarioWithinInvestmentRange({
-      baseScenario,
-      bidPrice,
-      targetProfit,
-      askMin,
-      maxInvestmentAmount,
-    }) ?? baseScenario
-  )
-}
-
-function solveMinimumQuantityBaseScenario({
-  bidPrice,
-  targetProfit,
-  askMin,
-  askMax,
-}: {
-  bidPrice: number
-  targetProfit: number
-  askMin: number
-  askMax: number
-}): SimulationScenario | null {
-  if (bidPrice <= 0 || askMin <= 0 || askMax <= 0 || askMax < askMin || askMax <= bidPrice) {
-    return null
-  }
-
-  let lowQuantity = 1
-  let highQuantity = 1
-
-  while (highQuantity < MAX_QUANTITY_SEARCH && computeNetProfit(highQuantity, bidPrice, askMax) < targetProfit) {
-    highQuantity *= 2
-  }
-
-  if (computeNetProfit(highQuantity, bidPrice, askMax) < targetProfit) {
-    return null
-  }
-
-  while (lowQuantity < highQuantity) {
-    const midpoint = Math.floor((lowQuantity + highQuantity) / 2)
-    if (computeNetProfit(midpoint, bidPrice, askMax) >= targetProfit) {
-      highQuantity = midpoint
-    } else {
-      lowQuantity = midpoint + 1
-    }
-  }
-
-  const quantity = lowQuantity
-  const askPrice = solveMinimumAsk({
-    quantity,
-    bidPrice,
-    targetProfit,
-    askMin,
-    askMax,
-  })
-
-  if (askPrice === null) {
-    return null
-  }
-
-  return buildScenarioTotals({
-    targetProfit,
-    quantity,
-    bidPrice,
-    askPrice,
-    isFeasible: true,
-  })
-}
-
-function refineScenarioWithinInvestmentRange({
-  baseScenario,
-  bidPrice,
-  targetProfit,
-  askMin,
-  maxInvestmentAmount,
-}: {
-  baseScenario: SimulationScenario
-  bidPrice: number
-  targetProfit: number
-  askMin: number
-  maxInvestmentAmount: number
-}): SimulationScenario | null {
-  if (!baseScenario.isFeasible || bidPrice <= 0 || askMin <= 0 || maxInvestmentAmount < MIN_INVESTMENT_AMOUNT) {
-    return null
-  }
-
-  for (let askPrice = askMin; askPrice <= baseScenario.askPrice; askPrice += 1) {
-    const candidate = solveFixedAskTargetScenario({
-      bidPrice,
-      askPrice,
-      targetProfit,
-    })
-
-    if (!candidate.isFeasible) {
-      continue
-    }
-
-    if (candidate.buyTotal < MIN_INVESTMENT_AMOUNT || candidate.buyTotal > maxInvestmentAmount) {
-      continue
-    }
-
-    return candidate
-  }
-
-  return null
-}
-
-function solveMinimumAsk({
-  quantity,
-  bidPrice,
-  targetProfit,
-  askMin,
-  askMax,
-}: {
-  quantity: number
-  bidPrice: number
-  targetProfit: number
-  askMin: number
-  askMax: number
-}) {
-  let low = askMin
-  let high = askMax
-
-  if (computeNetProfit(quantity, bidPrice, high) < targetProfit) {
-    return null
-  }
-
-  while (low < high) {
-    const midpoint = Math.floor((low + high) / 2)
-    if (computeNetProfit(quantity, bidPrice, midpoint) >= targetProfit) {
-      high = midpoint
-    } else {
-      low = midpoint + 1
-    }
-  }
-
-  return low
-}
-
-function solveFixedAskTargetScenario({
-  bidPrice,
-  askPrice,
-  targetProfit,
-}: {
-  bidPrice: number
-  askPrice: number
-  targetProfit: number
-}): SimulationScenario {
-  if (bidPrice <= 0 || askPrice <= 0 || askPrice <= bidPrice) {
-    return buildScenarioTotals({
-      targetProfit,
-      quantity: 0,
-      bidPrice,
-      askPrice,
-      isFeasible: false,
-    })
-  }
-
-  let lowQuantity = 1
-  let highQuantity = 1
-
-  while (highQuantity < MAX_QUANTITY_SEARCH && computeNetProfit(highQuantity, bidPrice, askPrice) < targetProfit) {
-    highQuantity *= 2
-  }
-
-  if (computeNetProfit(highQuantity, bidPrice, askPrice) < targetProfit) {
-    return buildScenarioTotals({
-      targetProfit,
-      quantity: 0,
-      bidPrice,
-      askPrice,
-      isFeasible: false,
-    })
-  }
-
-  while (lowQuantity < highQuantity) {
-    const midpoint = Math.floor((lowQuantity + highQuantity) / 2)
-    if (computeNetProfit(midpoint, bidPrice, askPrice) >= targetProfit) {
-      highQuantity = midpoint
-    } else {
-      lowQuantity = midpoint + 1
-    }
-  }
-
-  return buildScenarioTotals({
-    targetProfit,
-    quantity: lowQuantity,
-    bidPrice,
-    askPrice,
-    isFeasible: true,
-  })
-}
-
 function buildChartGeometry(scenarios: PriceScenario[]): ChartGeometry {
   if (scenarios.length === 0) {
     return {
@@ -863,71 +610,6 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
   return path
 }
 
-function calculateCommission(amount: number) {
-  if (amount <= 0) {
-    return 0
-  }
-
-  if (amount <= 5_000_000) {
-    return 14_875 * 0.5
-  }
-
-  return amount * TRII_PRO_VARIABLE_RATE
-}
-
-function computeNetProfit(quantity: number, bidPrice: number, askPrice: number) {
-  const buyAmount = quantity * bidPrice
-  const buyCommission = calculateCommission(buyAmount)
-  const sellAmount = quantity * askPrice
-  const sellCommission = calculateCommission(sellAmount)
-  return sellAmount - sellCommission - buyAmount - buyCommission
-}
-
-function buildScenarioTotals({
-  targetProfit,
-  quantity,
-  bidPrice,
-  askPrice,
-  isFeasible,
-}: {
-  targetProfit: number
-  quantity: number
-  bidPrice: number
-  askPrice: number
-  isFeasible: boolean
-}): SimulationScenario {
-  if (quantity <= 0) {
-    return {
-      targetProfit,
-      quantity: 0,
-      askPrice,
-      buyTotal: 0,
-      sellTotal: 0,
-      commissionCost: 0,
-      totalResult: Math.min(-1, Math.round(computeNetProfit(1, bidPrice, askPrice))),
-      isFeasible,
-    }
-  }
-
-  const buyTotal = quantity * bidPrice
-  const buyCommission = calculateCommission(buyTotal)
-  const sellTotal = quantity * askPrice
-  const sellCommission = calculateCommission(sellTotal)
-  const commissionCost = buyCommission + sellCommission
-  const totalResult = sellTotal - buyTotal - commissionCost
-
-  return {
-    targetProfit,
-    quantity,
-    askPrice,
-    buyTotal,
-    sellTotal,
-    commissionCost,
-    totalResult,
-    isFeasible,
-  }
-}
-
 function buildLossReviewScenario({
   quantity,
   bidPrice,
@@ -985,14 +667,6 @@ function solveStopLossAskPrice({
   return Math.max(0, Math.round(low))
 }
 
-function resolveRoundedPrice(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return 0
-  }
-
-  return Math.max(1, Math.round(value))
-}
-
 function resolveAvailableRoundedPrices(snapshot: SnapshotRecord) {
   return [
     snapshot.low_price,
@@ -1005,55 +679,6 @@ function resolveAvailableRoundedPrices(snapshot: SnapshotRecord) {
   ]
     .map((value) => resolveRoundedPrice(value))
     .filter((value) => value > 0)
-}
-
-function resolveAskMinimum(snapshot: SnapshotRecord) {
-  const candidates = [
-    snapshot.best_bid_price,
-    snapshot.microprice,
-    snapshot.last_price,
-    snapshot.best_ask_price,
-    snapshot.mid_price,
-    snapshot.low_price,
-    snapshot.high_price,
-  ]
-    .map((value) => resolveRoundedPrice(value))
-    .filter((value) => value > 0)
-
-  if (candidates.length === 0) {
-    return 0
-  }
-
-  return Math.min(...candidates)
-}
-
-function resolveAskMaximum(snapshot: SnapshotRecord) {
-  const candidates = [
-    snapshot.high_price,
-    snapshot.best_ask_price,
-    snapshot.microprice,
-    snapshot.last_price,
-    snapshot.mid_price,
-    snapshot.best_bid_price,
-    snapshot.low_price,
-  ]
-    .map((value) => resolveRoundedPrice(value))
-    .filter((value) => value > 0)
-
-  if (candidates.length === 0) {
-    return 0
-  }
-
-  return Math.max(...candidates)
-}
-
-function resolveChartAskLossCutoff(bidPrice: number) {
-  if (bidPrice <= 0) {
-    return 0
-  }
-
-  const breakEvenAsk = (bidPrice * (1 + TRII_PRO_VARIABLE_RATE)) / (1 - TRII_PRO_VARIABLE_RATE)
-  return Math.max(bidPrice, Math.ceil(breakEvenAsk))
 }
 
 function getDefaultIndex(scenarios: PriceScenario[], targetPrice: number) {

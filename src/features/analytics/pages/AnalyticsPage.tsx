@@ -20,6 +20,7 @@ import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { collectFlowSignalSymbols, rankCoreSymbols, resolveAvailableQuantity, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { deriveFreshnessTone } from '../lib/freshness'
 
 const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
@@ -235,6 +236,27 @@ export function AnalyticsPage() {
       ),
     [eligibleOverviewResults],
   )
+  const coreFreshnessSummary = useMemo(() => {
+    const counts = coreVisibleSymbols.reduce(
+      (accumulator, symbol) => {
+        const capturedAt = coreLatestBySymbol[symbol]?.current_snapshot?.captured_at
+        if (deriveFreshnessTone(capturedAt) === 'fresh') {
+          accumulator.fresh += 1
+        } else {
+          accumulator.stale += 1
+        }
+
+        return accumulator
+      },
+      { fresh: 0, stale: 0 },
+    )
+
+    return {
+      total: coreVisibleSymbols.length,
+      fresh: counts.fresh,
+      stale: counts.stale,
+    }
+  }, [coreLatestBySymbol, coreVisibleSymbols])
   const flowSignalSymbols = useMemo(
     () =>
       collectFlowSignalSymbols({
@@ -437,6 +459,7 @@ export function AnalyticsPage() {
         flowAudioEnabled={flowAudioEnabled}
         from={summary.from}
         onFlowAudioToggle={() => setFlowAudioEnabled((current) => !current)}
+        stockSummary={coreFreshnessSummary}
         to={summary.to}
       />
 

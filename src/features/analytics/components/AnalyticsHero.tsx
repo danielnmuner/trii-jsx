@@ -24,12 +24,19 @@ import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { formatInteger, formatPercentFromWhole } from '../lib/formatters'
 import { coreSortPresets, hasPositiveFlowSignal, type CoreSortIntent } from '../lib/coreSymbolSorting'
 
+type StockHeaderSummary = {
+  total: number
+  fresh: number
+  stale: number
+}
+
 type AnalyticsHeroProps = {
   from?: string
   dataStatusLabel: string
   dataStatusTone: 'loading' | 'fetching' | 'live' | 'degraded'
   flowAudioEnabled: boolean
   onFlowAudioToggle: () => void
+  stockSummary: StockHeaderSummary
   to?: string
 }
 
@@ -39,6 +46,7 @@ export function AnalyticsHero({
   flowAudioEnabled,
   from: _from,
   onFlowAudioToggle,
+  stockSummary,
   to: _to,
 }: AnalyticsHeroProps) {
   return (
@@ -49,7 +57,13 @@ export function AnalyticsHero({
           <span className={clsx('analytics-topbar__status', `is-${dataStatusTone}`)}>
             {dataStatusLabel}
           </span>
-          <h1>Analytics</h1>
+          <h1>
+            Stocks <span className="analytics-topbar__total">({stockSummary.total})</span>
+          </h1>
+          <div className="analytics-topbar__counts" aria-label="Core freshness summary">
+            <span className="analytics-topbar__count analytics-topbar__count--fresh">{stockSummary.fresh}</span>
+            <span className="analytics-topbar__count analytics-topbar__count--stale">{stockSummary.stale}</span>
+          </div>
         </div>
       </div>
       <div className="analytics-topbar__meta">

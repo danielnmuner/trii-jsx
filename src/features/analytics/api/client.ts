@@ -8,6 +8,15 @@ import {
   zscoreOpportunityResponseSchema,
 } from './schemas'
 
+type FetchZscoreOpportunitiesParams = {
+  symbol: string
+  tradingDate?: string
+  fromTradingDate?: string
+  toTradingDate?: string
+  sinceCapturedAt?: string
+  limit?: number
+}
+
 export async function fetchAnalyticsCatalog() {
   const payload = await getJson('/analytics/catalog')
   return analyticsCatalogResponseSchema.parse(payload)
@@ -27,16 +36,32 @@ export async function fetchAnalyticsHistoricStats(symbol: string) {
   return analyticsHistoricStatsResponseSchema.parse(payload)
 }
 
-export async function fetchZscoreOpportunities(
-  symbol: string,
-  tradingDate: string,
+export async function fetchZscoreOpportunities({
+  symbol,
+  tradingDate,
+  fromTradingDate,
+  toTradingDate,
+  sinceCapturedAt,
   limit = ANALYTICS_ZSCORE_LIMIT,
-) {
+}: FetchZscoreOpportunitiesParams) {
   const query = new URLSearchParams({
     symbol,
-    trading_date: tradingDate,
     limit: String(limit),
   })
+
+  if (tradingDate) {
+    query.set('trading_date', tradingDate)
+  }
+  if (fromTradingDate) {
+    query.set('from_trading_date', fromTradingDate)
+  }
+  if (toTradingDate) {
+    query.set('to_trading_date', toTradingDate)
+  }
+  if (sinceCapturedAt) {
+    query.set('since_captured_at', sinceCapturedAt)
+  }
+
   const payload = await getJson(`/analytics/zscore-opportunities?${query.toString()}`)
   return zscoreOpportunityResponseSchema.parse(payload)
 }

@@ -1,4 +1,10 @@
 import type { AnalyticsSymbolFeed, ZscoreOpportunityRecord } from '../api/schemas'
+import {
+  DEFAULT_INVESTMENT_CAP,
+  DEFAULT_PROFIT_TARGET,
+  resolveDefaultProfitRiskSpan,
+  resolveDefaultProfitScenario,
+} from './deterministicSimulation'
 import { computeStatZScore } from './formatters'
 import { extractApprovedPositionSummary } from './positionSummary'
 
@@ -6,6 +12,7 @@ export const coreSortPresets = [
   { key: 'manual', label: 'Manual' },
   { key: 'held', label: 'Held' },
   { key: 'value', label: 'Most Traded' },
+  { key: 'profit', label: 'Profit' },
   { key: 'flow_z', label: 'Flow Z' },
   { key: 'up', label: 'Up %' },
   { key: 'down', label: 'Down %' },
@@ -32,6 +39,24 @@ export function rankCoreSymbols({
   }
 
   const baseIndex = new Map(baseOrder.map((symbol, index) => [symbol, index]))
+  const profitScenariosBySymbol =
+    intent === 'profit'
+      ? Object.fromEntries(
+          baseOrder.map((symbol) => [
+            symbol,
+            resolveProfitScenario(latestBySymbol[symbol]),
+          ]),
+        )
+      : undefined
+  const profitRiskBySymbol =
+    intent === 'profit'
+      ? Object.fromEntries(
+          baseOrder.map((symbol) => [
+            symbol,
+            resolveProfitRisk(latestBySymbol[symbol]),
+          ]),
+        )
+      : undefined
 
   return [...baseOrder].sort((left, right) => {
     const compareByIntent = compareSymbolsByIntent({
@@ -39,6 +64,8 @@ export function rankCoreSymbols({
       right,
       latestBySymbol,
       intent,
+      profitScenariosBySymbol,
+      profitRiskBySymbol,
     })
 
     if (compareByIntent !== 0) {
@@ -54,11 +81,15 @@ function compareSymbolsByIntent({
   right,
   latestBySymbol,
   intent,
+  profitScenariosBySymbol,
+  profitRiskBySymbol,
 }: {
   left: string
   right: string
   latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
   intent: Exclude<CoreSortIntent, 'manual'>
+  profitScenariosBySymbol?: Record<string, ReturnType<typeof resolveDefaultProfitScenario> | undefined>
+  profitRiskBySymbol?: Record<string, number | undefined>
 }) {
   const leftSnapshot = latestBySymbol[left]?.current_snapshot
   const rightSnapshot = latestBySymbol[right]?.current_snapshot
@@ -87,6 +118,28 @@ function compareSymbolsByIntent({
 
   if (intent === 'value') {
     return compareNumbersDesc(leftSnapshot?.traded_value, rightSnapshot?.traded_value)
+  }
+
+  if (intent === 'profit') {
+    const leftScenario = profitScenariosBySymbol?.[left]
+    const rightScenario = profitScenariosBySymbol?.[right]
+    const leftQualified = isProfitQualified(leftScenario)
+    const rightQualified = isProfitQualified(rightScenario)
+
+    if (leftQualified !== rightQualified) {
+      return leftQualified ? -1 : 1
+    }
+
+    if (leftQualified && rightQualified) {
+      const riskComparison = compareNumbersAsc(profitRiskBySymbol?.[left], profitRiskBySymbol?.[right])
+      if (riskComparison !== 0) {
+        return riskComparison
+      }
+
+      return compareNumbersAsc(leftScenario?.quantity, rightScenario?.quantity)
+    }
+
+    return 0
   }
 
   if (intent === 'flow_z') {
@@ -167,4 +220,28 @@ export function resolveFlowSignalZScore(feed: AnalyticsSymbolFeed | undefined) {
 
 export function hasPositiveFlowSignal(feed: AnalyticsSymbolFeed | undefined) {
   return resolveFlowSignalZScore(feed) > 1.8
+}
+
+function isProfitQualified(scenario: ReturnType<typeof resolveDefaultProfitScenario> | undefined) {
+  return Boolean(scenario && scenario.totalResult >= DEFAULT_PROFIT_TARGET)
+}
+
+function resolveProfitScenario(feed: AnalyticsSymbolFeed | undefined) {
+  if (!feed?.current_snapshot) {
+    return undefined
+  }
+
+  return resolveDefaultProfitScenario(
+    feed.current_snapshot,
+    DEFAULT_PROFIT_TARGET,
+    DEFAULT_INVESTMENT_CAP,
+  )
+}
+
+function resolveProfitRisk(feed: AnalyticsSymbolFeed | undefined) {
+  if (!feed?.current_snapshot) {
+    return undefined
+  }
+
+  return resolveDefaultProfitRiskSpan(feed.current_snapshot)
 }

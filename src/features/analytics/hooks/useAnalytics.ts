@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchAnalyticsCatalog,
   fetchAnalyticsHistoricStats,
@@ -14,6 +14,7 @@ import {
   filterZscoreOpportunityRecords,
   sanitizeAnalyticsSymbolFeed,
 } from '../lib/analyticsDataPolicy'
+import { isColombiaBusinessDateKey } from '../lib/colombiaBusinessCalendar'
 
 export function useAnalyticsCatalog() {
   return useQuery({
@@ -84,23 +85,46 @@ function findSeasonalityProfile(records: Array<HistoricStat | SeasonalityProfile
 }
 
 export function useZscoreOpportunityWindows(symbols: string[], tradingDate: string | null, enabled = true) {
+  const queryClient = useQueryClient()
   const anchorDate = tradingDate ?? ''
-  const previousDate = tradingDate ? toPreviousDate(tradingDate) : ''
 
   const queries = useQueries({
     queries: symbols.map((symbol) => ({
       queryKey: ['analytics', 'zscore-window', symbol, anchorDate],
       queryFn: async () => {
-        const [currentDayResponse, previousDayResponse] = await Promise.all([
-          fetchZscoreOpportunities(symbol, anchorDate),
-          previousDate ? fetchZscoreOpportunities(symbol, previousDate) : Promise.resolve(null),
-        ])
+        const windowQueryKey = ['analytics', 'zscore-window', symbol, anchorDate] as const
+        const cachedWindow = queryClient.getQueryData<{
+          symbol: string
+          tradingDate: string
+          recordCount: number
+          records: ZscoreOpportunityRecord[]
+        }>(windowQueryKey)
+        const latestCapturedAt = cachedWindow?.records.at(-1)?.captured_at
+        let incomingRecords: ZscoreOpportunityRecord[] = []
+
+        if (latestCapturedAt) {
+          const response = await fetchZscoreOpportunities({
+            symbol,
+            sinceCapturedAt: latestCapturedAt,
+          })
+          incomingRecords = response.result.records
+        } else {
+          const trailingDates = buildTrailingBusinessDateKeys(anchorDate, 3)
+          const response = await fetchZscoreOpportunities({
+            symbol,
+            fromTradingDate: trailingDates[0],
+            toTradingDate: trailingDates[trailingDates.length - 1],
+          })
+          incomingRecords = response.result.records
+        }
+
+        const mergedRecords = mergeZscoreWindowRecords(cachedWindow?.records ?? [], incomingRecords)
 
         return {
           symbol,
           tradingDate: anchorDate,
-          recordCount: (currentDayResponse.result.record_count ?? 0) + (previousDayResponse?.result.record_count ?? 0),
-          records: mergeZscoreWindowRecords(currentDayResponse.result.records, previousDayResponse?.result.records ?? []),
+          recordCount: mergedRecords.length,
+          records: mergedRecords,
         }
       },
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
@@ -161,10 +185,10 @@ export function useDailyClosingSnapshots(symbols: string[], enabled = true) {
   }, [queries])
 }
 
-function mergeZscoreWindowRecords(currentRecords: ZscoreOpportunityRecord[], previousRecords: ZscoreOpportunityRecord[]) {
+function mergeZscoreWindowRecords(existingRecords: ZscoreOpportunityRecord[], incomingRecords: ZscoreOpportunityRecord[]) {
   const uniqueRecords = new Map<string, ZscoreOpportunityRecord>()
 
-  for (const record of [...previousRecords, ...currentRecords]) {
+  for (const record of [...existingRecords, ...incomingRecords]) {
     const key = record.snapshot_checksum || `${record.symbol}-${record.captured_at}`
     uniqueRecords.set(key, record)
   }
@@ -176,14 +200,34 @@ function mergeZscoreWindowRecords(currentRecords: ZscoreOpportunityRecord[], pre
   return filterZscoreOpportunityRecords(sorted)
 }
 
-function toPreviousDate(value: string) {
-  const base = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(base.getTime())) {
-    return value
+function buildTrailingBusinessDateKeys(anchorDate: string, count: number) {
+  if (count <= 0) {
+    return []
   }
 
-  base.setDate(base.getDate() - 1)
-  return base.toISOString().slice(0, 10)
+  const [year, month, day] = anchorDate.split('-').map(Number)
+  const cursor = new Date(Date.UTC(year, month - 1, day))
+  if (Number.isNaN(cursor.getTime())) {
+    return [anchorDate]
+  }
+
+  const dates: string[] = []
+  while (dates.length < count) {
+    const dateKey = toDateKey(cursor)
+    if (isColombiaBusinessDateKey(dateKey)) {
+      dates.unshift(dateKey)
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+  }
+
+  return dates
+}
+
+function toDateKey(date: Date) {
+  const year = date.getUTCFullYear()
+  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getUTCDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function sortDailyClosingRecords(records: DailyClosingRecord[]) {

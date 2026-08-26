@@ -3445,6 +3445,22 @@ button {
   fill: rgba(29, 95, 109, 0.18);
 }
 
+.daily-close-chart__bandLabel {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.daily-close-chart__bandLabel--ask {
+  fill: rgba(240, 146, 255, 0.9);
+}
+
+.daily-close-chart__bandLabel--bid {
+  fill: rgba(152, 121, 255, 0.88);
+}
+
 .daily-close-chart__volumeBar {
   fill: rgba(84, 98, 122, 0.18);
 }
@@ -3702,6 +3718,22 @@ button {
 
 .zscore-chart__band--lower {
   fill: rgba(29, 95, 109, 0.18);
+}
+
+.zscore-chart__bandLabel {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.zscore-chart__bandLabel--ask {
+  fill: rgba(240, 146, 255, 0.9);
+}
+
+.zscore-chart__bandLabel--bid {
+  fill: rgba(152, 121, 255, 0.88);
 }
 
 .zscore-chart__valueBar {

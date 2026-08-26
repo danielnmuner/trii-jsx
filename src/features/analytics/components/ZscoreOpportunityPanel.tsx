@@ -212,16 +212,18 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
         >
           <defs>
             <linearGradient id={`${chartThemeId}-upper-band`} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(255, 92, 212, 0.34)" />
-              <stop offset="100%" stopColor="rgba(113, 76, 255, 0.1)" />
+              <stop offset="0%" stopColor="rgba(255, 116, 248, 0.58)" />
+              <stop offset="52%" stopColor="rgba(230, 82, 255, 0.38)" />
+              <stop offset="100%" stopColor="rgba(138, 92, 255, 0.16)" />
             </linearGradient>
             <linearGradient id={`${chartThemeId}-middle-band`} x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="rgba(45, 214, 255, 0.28)" />
               <stop offset="100%" stopColor="rgba(65, 106, 255, 0.16)" />
             </linearGradient>
             <linearGradient id={`${chartThemeId}-lower-band`} x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="rgba(24, 255, 199, 0.24)" />
-              <stop offset="100%" stopColor="rgba(36, 143, 255, 0.09)" />
+              <stop offset="0%" stopColor="rgba(148, 96, 255, 0.44)" />
+              <stop offset="52%" stopColor="rgba(108, 122, 255, 0.3)" />
+              <stop offset="100%" stopColor="rgba(74, 208, 255, 0.14)" />
             </linearGradient>
             <linearGradient id={`${chartThemeId}-value-bar`} x1="0%" y1="100%" x2="0%" y2="0%">
               <stop offset="0%" stopColor="rgba(28, 37, 55, 0.08)" />
@@ -301,6 +303,12 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
           <path d={chart.upperBandPath} className="zscore-chart__band zscore-chart__band--upper" fill={`url(#${chartThemeId}-upper-band)`} />
           <path d={chart.middleBandPath} className="zscore-chart__band zscore-chart__band--middle" fill={`url(#${chartThemeId}-middle-band)`} />
           <path d={chart.lowerBandPath} className="zscore-chart__band zscore-chart__band--lower" fill={`url(#${chartThemeId}-lower-band)`} />
+          <text x="52" y="30" textAnchor="start" className="zscore-chart__bandLabel zscore-chart__bandLabel--ask">
+            ASK
+          </text>
+          <text x="52" y="244" textAnchor="start" className="zscore-chart__bandLabel zscore-chart__bandLabel--bid">
+            BID
+          </text>
           <path
             d={chart.linePath}
             fill="none"

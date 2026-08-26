@@ -143,16 +143,18 @@ function DailyClosingCard({
         >
           <defs>
             <linearGradient id={`${chartThemeId}-upper-band`} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(255, 92, 212, 0.34)" />
-              <stop offset="100%" stopColor="rgba(113, 76, 255, 0.1)" />
+              <stop offset="0%" stopColor="rgba(255, 116, 248, 0.58)" />
+              <stop offset="52%" stopColor="rgba(230, 82, 255, 0.38)" />
+              <stop offset="100%" stopColor="rgba(138, 92, 255, 0.16)" />
             </linearGradient>
             <linearGradient id={`${chartThemeId}-middle-band`} x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="rgba(45, 214, 255, 0.28)" />
               <stop offset="100%" stopColor="rgba(65, 106, 255, 0.16)" />
             </linearGradient>
             <linearGradient id={`${chartThemeId}-lower-band`} x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="rgba(24, 255, 199, 0.24)" />
-              <stop offset="100%" stopColor="rgba(36, 143, 255, 0.09)" />
+              <stop offset="0%" stopColor="rgba(148, 96, 255, 0.44)" />
+              <stop offset="52%" stopColor="rgba(108, 122, 255, 0.3)" />
+              <stop offset="100%" stopColor="rgba(74, 208, 255, 0.14)" />
             </linearGradient>
             <linearGradient id={`${chartThemeId}-volume-bar`} x1="0%" y1="100%" x2="0%" y2="0%">
               <stop offset="0%" stopColor="rgba(28, 37, 55, 0.08)" />
@@ -210,6 +212,12 @@ function DailyClosingCard({
           <path d={chart.upperBandPath} className="daily-close-chart__band daily-close-chart__band--upper" fill={`url(#${chartThemeId}-upper-band)`} />
           <path d={chart.middleBandPath} className="daily-close-chart__band daily-close-chart__band--middle" fill={`url(#${chartThemeId}-middle-band)`} />
           <path d={chart.lowerBandPath} className="daily-close-chart__band daily-close-chart__band--lower" fill={`url(#${chartThemeId}-lower-band)`} />
+          <text x="72" y="32" textAnchor="start" className="daily-close-chart__bandLabel daily-close-chart__bandLabel--ask">
+            ASK
+          </text>
+          <text x="72" y="228" textAnchor="start" className="daily-close-chart__bandLabel daily-close-chart__bandLabel--bid">
+            BID
+          </text>
 
           {activePoint ? (
             <line

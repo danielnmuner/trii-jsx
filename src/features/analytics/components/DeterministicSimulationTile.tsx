@@ -166,6 +166,8 @@ export function DeterministicSimulationTile({ snapshot, positionSummary }: Deter
             primary: formatInteger(activeBid.price),
             secondary: `${formatSignedInteger(activeBid.deltaValue)} (${formatSignedPercent(activeBid.deltaPct)})`,
           }}
+          hoverSelectable={false}
+          focusSelectable={false}
           headerControls={
             <div className="overview-sim__targetSwitch" role="tablist" aria-label="Simulation target profit">
               {PROFIT_TARGETS.map((targetProfit) => {
@@ -316,6 +318,8 @@ function PriceChart({
   lossCutoffPrice,
   summary,
   clickSelectable = true,
+  hoverSelectable = true,
+  focusSelectable = true,
 }: {
   title: string
   axisStart: string
@@ -333,6 +337,8 @@ function PriceChart({
   lossCutoffPrice?: number
   summary: ChartSummary
   clickSelectable?: boolean
+  hoverSelectable?: boolean
+  focusSelectable?: boolean
 }) {
   const referenceX = useMemo(() => resolveReferenceX(geometry.points, referencePrice), [geometry.points, referencePrice])
   const optimizedAskX = useMemo(() => resolveReferenceX(geometry.points, optimizedAskPrice), [geometry.points, optimizedAskPrice])
@@ -426,8 +432,8 @@ function PriceChart({
               className="overview-sim__pointHit"
               tabIndex={0}
               aria-label={`${title} ${formatInteger(point.scenario.price)}`}
-              onMouseEnter={() => onSelect(index)}
-              onFocus={() => onSelect(index)}
+              onMouseEnter={hoverSelectable ? () => onSelect(index) : undefined}
+              onFocus={focusSelectable ? () => onSelect(index) : undefined}
               onClick={clickSelectable ? () => onSelect(index) : undefined}
             />
           </g>

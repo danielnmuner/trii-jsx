@@ -3434,23 +3434,26 @@ button {
 }
 
 .daily-close-chart__band--upper {
-  fill: rgba(92, 68, 110, 0.18);
+  fill: rgba(182, 96, 214, 0.5);
 }
 
 .daily-close-chart__band--middle {
-  fill: rgba(40, 104, 196, 0.2);
+  fill: rgba(66, 131, 222, 0.34);
 }
 
 .daily-close-chart__band--lower {
-  fill: rgba(29, 95, 109, 0.18);
+  fill: rgba(104, 118, 214, 0.48);
 }
 
 .daily-close-chart__bandLabel {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  paint-order: stroke fill;
+  stroke: rgba(4, 7, 12, 0.92);
+  stroke-width: 1.1px;
 }
 
 .daily-close-chart__bandLabel--ask {
@@ -3709,23 +3712,26 @@ button {
 }
 
 .zscore-chart__band--upper {
-  fill: rgba(92, 68, 110, 0.18);
+  fill: rgba(182, 96, 214, 0.5);
 }
 
 .zscore-chart__band--middle {
-  fill: rgba(40, 104, 196, 0.2);
+  fill: rgba(66, 131, 222, 0.34);
 }
 
 .zscore-chart__band--lower {
-  fill: rgba(29, 95, 109, 0.18);
+  fill: rgba(104, 118, 214, 0.48);
 }
 
 .zscore-chart__bandLabel {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  paint-order: stroke fill;
+  stroke: rgba(4, 7, 12, 0.92);
+  stroke-width: 1.1px;
 }
 
 .zscore-chart__bandLabel--ask {

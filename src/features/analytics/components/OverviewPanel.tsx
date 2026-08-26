@@ -3,6 +3,7 @@ import type { OrderPositionSummary } from '../lib/orderPosition'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
 import { SymbolIdentity } from './SymbolIdentity'
+import { buildOverviewQualitativeOpenAiUrl } from '../lib/overviewOpenAiPrompt'
 import {
   computeCumulativeVwap,
   formatBandDelta,
@@ -18,6 +19,7 @@ type OverviewPanelProps = {
 
 type TapeTone = 'positive' | 'negative' | 'neutral'
 type BadgeTone = 'fresh' | 'stale'
+type ZScoreTone = 'ask' | 'bid' | 'neutral'
 
 type TapeItemData = {
   key: string
@@ -39,7 +41,9 @@ type TapeItemData = {
     inlineTone?: TapeTone
     secondaryTone?: TapeTone
     zScore?: string
+    zScoreTone?: ZScoreTone
   }>
+  zScoreTone?: ZScoreTone
 }
 
 export function OverviewPanel({ snapshots, orderPositionsBySymbol = {} }: OverviewPanelProps) {
@@ -65,6 +69,9 @@ export function OverviewPanel({ snapshots, orderPositionsBySymbol = {} }: Overvi
         const freshnessTone = deriveFreshnessTone(current.captured_at)
         const sampleLabel = formatSampleCount(sampleCount)
         const headerMeta = sampleLabel ? `${freshnessLabel} (${sampleLabel})` : freshnessLabel
+        const openAiUrl = buildOverviewQualitativeOpenAiUrl(snapshot)
+        const tradedVolumeZScore = buildZScoreContext(currentStats.traded_volume)
+        const tradedValueZScore = buildZScoreContext(currentStats.traded_value)
 
         const topItems: TapeItemData[] = [
           buildLastPriceSpreadItem(current, currentStats, marketTone),
@@ -104,10 +111,22 @@ export function OverviewPanel({ snapshots, orderPositionsBySymbol = {} }: Overvi
           },
           {
             key: 'flow',
-            className: 'overview-tape__item overview-tape__item--paired',
+            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--flow',
             pairs: [
-              { label: 'Traded volume', value: formatMetricValue('traded_volume', current.traded_volume) },
-              { label: 'Traded value', value: formatMetricValue('traded_value', current.traded_value) },
+              {
+                label: 'Traded volume',
+                value: formatMetricValue('traded_volume', current.traded_volume),
+                secondary: buildPreviousMetricValue('traded_volume', current.traded_volume, snapshot.previous_snapshot?.traded_volume),
+                zScore: tradedVolumeZScore.zScore,
+                zScoreTone: tradedVolumeZScore.tone,
+              },
+              {
+                label: 'Traded value',
+                value: formatMetricValue('traded_value', current.traded_value),
+                secondary: buildPreviousMetricValue('traded_value', current.traded_value, snapshot.previous_snapshot?.traded_value),
+                zScore: tradedValueZScore.zScore,
+                zScoreTone: tradedValueZScore.tone,
+              },
             ],
           },
           buildObiPairItem(current, currentStats),
@@ -118,7 +137,16 @@ export function OverviewPanel({ snapshots, orderPositionsBySymbol = {} }: Overvi
             <header className="overview-card__header">
               <div className="overview-card__title">
                 <h3>
-                  <SymbolIdentity symbol={snapshot.symbol} />
+                  <a
+                    href={openAiUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="overview-card__titleLink"
+                    aria-label={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
+                    title={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
+                  >
+                    <SymbolIdentity symbol={snapshot.symbol} />
+                  </a>
                 </h3>
               </div>
               <span className={`overview-card__meta overview-card__meta--${freshnessTone}`}>{headerMeta}</span>
@@ -165,7 +193,9 @@ function TapeItem({ item }: { item: TapeItemData }) {
               <strong className="overview-tape__pair-value">{pair.value}</strong>
               {pair.zScore ? (
                 <div className="overview-tape__pair-zstack">
-                  <span className="overview-tape__zscore">{pair.zScore}</span>
+                  <span className={`overview-tape__zscore overview-tape__zscore--${pair.zScoreTone ?? 'neutral'}`}>
+                    {pair.zScore}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -198,7 +228,9 @@ function TapeItem({ item }: { item: TapeItemData }) {
         <strong className="overview-tape__main">{item.primary ?? 'n/a'}</strong>
         {item.zScore ? (
           <div className="overview-tape__zstack">
-            <span className="overview-tape__zscore">{item.zScore}</span>
+            <span className={`overview-tape__zscore overview-tape__zscore--${item.zScoreTone ?? 'neutral'}`}>
+              {item.zScore}
+            </span>
           </div>
         ) : null}
       </div>
@@ -249,6 +281,7 @@ function buildLastPriceSpreadItem(
         label: 'SPREAD BPS',
         value: formatMetricValue('spread_bps', current.spread_bps),
         zScore: spreadContext.zScore,
+        zScoreTone: spreadContext.tone,
       },
     ],
   }
@@ -269,11 +302,13 @@ function buildObiPairItem(
         label: 'OBI L1',
         value: formatMetricValue('obi_l1', current.obi_l1),
         zScore: obiL1Context.zScore,
+        zScoreTone: obiL1Context.tone,
       },
       {
         label: 'OBI TOP 5',
         value: formatMetricValue('obi_top_5', current.obi_top_5),
         zScore: obiTop5Context.zScore,
+        zScoreTone: obiTop5Context.tone,
       },
     ],
   }
@@ -292,17 +327,49 @@ function buildZScoreContext(stat?: HistoricStat) {
     stat.stddev === undefined ||
     stat.stddev === 0
   ) {
-    return { zScore: undefined }
+    return { zScore: undefined, tone: 'neutral' as ZScoreTone }
   }
 
   const zScore = computeZScore(stat)
   if (zScore === null) {
-    return { zScore: undefined }
+    return { zScore: undefined, tone: 'neutral' as ZScoreTone }
   }
 
   return {
     zScore: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(1)}\u03c3`,
+    tone: deriveZScoreTone(zScore),
   }
+}
+
+function deriveZScoreTone(zScore: number): ZScoreTone {
+  if (zScore < -1.8) {
+    return 'ask'
+  }
+
+  if (zScore > 1.8) {
+    return 'bid'
+  }
+
+  return 'neutral'
+}
+
+function buildPreviousMetricValue(
+  metricKey: string,
+  current: number | null | undefined,
+  previous: number | null | undefined,
+) {
+  if (
+    current === null ||
+    current === undefined ||
+    previous === null ||
+    previous === undefined ||
+    Number.isNaN(current) ||
+    Number.isNaN(previous)
+  ) {
+    return 'Prev n/a'
+  }
+
+  return `Prev ${formatMetricValue(metricKey, previous)}`
 }
 
 function resolveSampleCount(currentStats: Record<string, HistoricStat>) {

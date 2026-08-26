@@ -1,5 +1,5 @@
 import { getJson } from '../../../shared/api/http'
-import { ANALYTICS_DAILY_CLOSING_LIMIT, ANALYTICS_ZSCORE_LIMIT } from '../config'
+import { ANALYTICS_DAILY_CLOSING_LIMIT, ANALYTICS_SNAPSHOT_LIMIT, ANALYTICS_ZSCORE_LIMIT } from '../config'
 import {
   analyticsCatalogResponseSchema,
   analyticsHistoricStatsResponseSchema,
@@ -13,8 +13,12 @@ export async function fetchAnalyticsCatalog() {
   return analyticsCatalogResponseSchema.parse(payload)
 }
 
-export async function fetchAnalyticsSnapshot(symbol: string) {
-  const payload = await getJson(`/analytics/snapshot?symbol=${encodeURIComponent(symbol)}`)
+export async function fetchAnalyticsSnapshot(symbol: string, limit = ANALYTICS_SNAPSHOT_LIMIT) {
+  const query = new URLSearchParams({
+    symbol,
+    limit: String(limit),
+  })
+  const payload = await getJson(`/analytics/snapshot?${query.toString()}`)
   return analyticsSnapshotResponseSchema.parse(payload)
 }
 

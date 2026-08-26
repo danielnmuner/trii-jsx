@@ -1,10 +1,12 @@
 import type { AnalyticsSymbolFeed, ZscoreOpportunityRecord } from '../api/schemas'
+import { computeStatZScore } from './formatters'
 import { extractApprovedPositionSummary } from './positionSummary'
 
 export const coreSortPresets = [
   { key: 'manual', label: 'Manual' },
   { key: 'held', label: 'Held' },
   { key: 'value', label: 'Most Traded' },
+  { key: 'flow_z', label: 'Flow Z' },
   { key: 'up', label: 'Up %' },
   { key: 'down', label: 'Down %' },
   { key: 'tight', label: 'Tight' },
@@ -16,7 +18,7 @@ export type CoreSortIntent = (typeof coreSortPresets)[number]['key']
 
 type RankCoreSymbolsArgs = {
   baseOrder: string[]
-  latestBySymbol: Record<string, AnalyticsSymbolFeed['current_snapshot'] | undefined>
+  latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
   intent: CoreSortIntent
 }
 
@@ -55,36 +57,56 @@ function compareSymbolsByIntent({
 }: {
   left: string
   right: string
-  latestBySymbol: Record<string, AnalyticsSymbolFeed['current_snapshot'] | undefined>
+  latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
   intent: Exclude<CoreSortIntent, 'manual'>
 }) {
+  const leftSnapshot = latestBySymbol[left]?.current_snapshot
+  const rightSnapshot = latestBySymbol[right]?.current_snapshot
+
   if (intent === 'up') {
     return compareNumbersDesc(
-      latestBySymbol[left]?.daily_change_percent,
-      latestBySymbol[right]?.daily_change_percent,
+      leftSnapshot?.daily_change_percent,
+      rightSnapshot?.daily_change_percent,
     )
   }
 
   if (intent === 'down') {
     return compareNumbersAsc(
-      latestBySymbol[left]?.daily_change_percent,
-      latestBySymbol[right]?.daily_change_percent,
+      leftSnapshot?.daily_change_percent,
+      rightSnapshot?.daily_change_percent,
     )
   }
 
   if (intent === 'tight') {
-    return compareNumbersAsc(latestBySymbol[left]?.spread_bps, latestBySymbol[right]?.spread_bps)
+    return compareNumbersAsc(leftSnapshot?.spread_bps, rightSnapshot?.spread_bps)
   }
 
   if (intent === 'recent') {
-    return compareTimestampsDesc(latestBySymbol[left]?.captured_at, latestBySymbol[right]?.captured_at)
+    return compareTimestampsDesc(leftSnapshot?.captured_at, rightSnapshot?.captured_at)
   }
 
   if (intent === 'value') {
-    return compareNumbersDesc(latestBySymbol[left]?.traded_value, latestBySymbol[right]?.traded_value)
+    return compareNumbersDesc(leftSnapshot?.traded_value, rightSnapshot?.traded_value)
   }
 
-  return compareNumbersDesc(latestBySymbol[left]?.spread_bps, latestBySymbol[right]?.spread_bps)
+  if (intent === 'flow_z') {
+    return compareNumbersDesc(
+      resolveFlowSignalZScore(latestBySymbol[left]),
+      resolveFlowSignalZScore(latestBySymbol[right]),
+    )
+  }
+
+  return compareNumbersDesc(leftSnapshot?.spread_bps, rightSnapshot?.spread_bps)
+}
+
+export function collectFlowSignalSymbols({
+  symbols,
+  latestBySymbol,
+}: {
+  symbols: string[]
+  latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
+}) {
+  return symbols.filter((symbol) => hasPositiveFlowSignal(latestBySymbol[symbol]))
 }
 
 export function resolveAvailableQuantity(
@@ -132,4 +154,17 @@ function normalizeTimestamp(value: string | null | undefined) {
 
   const timestamp = new Date(value).getTime()
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
+}
+
+export function resolveFlowSignalZScore(feed: AnalyticsSymbolFeed | undefined) {
+  const tradedVolumeZ = computeStatZScore(feed?.current_stats?.traded_volume)
+  const tradedValueZ = computeStatZScore(feed?.current_stats?.traded_value)
+  return Math.max(
+    typeof tradedVolumeZ === 'number' && Number.isFinite(tradedVolumeZ) ? tradedVolumeZ : Number.NEGATIVE_INFINITY,
+    typeof tradedValueZ === 'number' && Number.isFinite(tradedValueZ) ? tradedValueZ : Number.NEGATIVE_INFINITY,
+  )
+}
+
+export function hasPositiveFlowSignal(feed: AnalyticsSymbolFeed | undefined) {
+  return resolveFlowSignalZScore(feed) > 1.8
 }

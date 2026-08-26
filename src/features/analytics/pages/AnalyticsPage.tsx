@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { readAnalyticsSymbolOrder, writeAnalyticsSymbolOrder } from '../../../shared/config/storage'
+import {
+  readAnalyticsFlowAudioEnabled,
+  readAnalyticsSymbolOrder,
+  writeAnalyticsFlowAudioEnabled,
+  writeAnalyticsSymbolOrder,
+} from '../../../shared/config/storage'
 import { StatusState } from '../../../shared/ui/StatusState'
 import { Tabs } from '../../../shared/ui/Tabs'
 import { AnalyticsFilters, AnalyticsHero } from '../components/AnalyticsHero'
@@ -8,12 +13,13 @@ import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
 import { HistoricStatsPanel } from '../components/HistoricStatsPanel'
 import { OverviewPanel } from '../components/OverviewPanel'
 import { ZscoreOpportunityPanel } from '../components/ZscoreOpportunityPanel'
+import { useFlowSignalMonitor } from '../hooks/useFlowSignalMonitor'
 import { useAnalyticsCatalog, useAnalyticsSnapshots, useDailyClosingSnapshots, useZscoreOpportunityWindows } from '../hooks/useAnalytics'
 import { useOrderPositions } from '../hooks/useOrderPositions'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
-import { rankCoreSymbols, resolveAvailableQuantity, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { collectFlowSignalSymbols, rankCoreSymbols, resolveAvailableQuantity, type CoreSortIntent } from '../lib/coreSymbolSorting'
 
 const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
@@ -50,6 +56,7 @@ export function AnalyticsPage() {
   const symbols = catalogQuery.data?.result.symbols ?? []
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
+  const [flowAudioEnabled, setFlowAudioEnabled] = useState<boolean>(() => readAnalyticsFlowAudioEnabled())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
   const querySelectedSymbols =
     selectedSymbols.length > 0
@@ -79,7 +86,7 @@ export function AnalyticsPage() {
     () =>
       rankCoreSymbols({
         baseOrder: symbolOrder,
-        latestBySymbol: Object.fromEntries(snapshotsQuery.results.map((result) => [result.symbol, result.current_snapshot])),
+        latestBySymbol: Object.fromEntries(snapshotsQuery.results.map((result) => [result.symbol, result])),
         intent: coreSortIntent,
       }),
     [coreSortIntent, latestZscoreBySymbol, snapshotsQuery.results, symbolOrder],
@@ -126,6 +133,10 @@ export function AnalyticsPage() {
 
     writeAnalyticsSymbolOrder(symbolOrder)
   }, [symbolOrder])
+
+  useEffect(() => {
+    writeAnalyticsFlowAudioEnabled(flowAudioEnabled)
+  }, [flowAudioEnabled])
 
   const summary = useMemo(() => {
     const timestamps = snapshotsQuery.results
@@ -220,10 +231,19 @@ export function AnalyticsPage() {
   const coreLatestBySymbol = useMemo(
     () =>
       Object.fromEntries(
-        eligibleOverviewResults.map((result) => [result.symbol, result.current_snapshot]),
+        eligibleOverviewResults.map((result) => [result.symbol, result]),
       ),
     [eligibleOverviewResults],
   )
+  const flowSignalSymbols = useMemo(
+    () =>
+      collectFlowSignalSymbols({
+        symbols: coreVisibleSymbols,
+        latestBySymbol: coreLatestBySymbol,
+      }),
+    [coreLatestBySymbol, coreVisibleSymbols],
+  )
+  const flowSignalMonitor = useFlowSignalMonitor(flowSignalSymbols, flowAudioEnabled)
 
   const freezeCurrentCoreOrder = () => {
     setSymbolOrder((currentOrder) => {
@@ -414,11 +434,14 @@ export function AnalyticsPage() {
       <AnalyticsHero
         dataStatusLabel={activeDataStatus.label}
         dataStatusTone={activeDataStatus.tone}
+        flowAudioEnabled={flowAudioEnabled}
         from={summary.from}
+        onFlowAudioToggle={() => setFlowAudioEnabled((current) => !current)}
         to={summary.to}
       />
 
       <AnalyticsFilters
+        flowSignalCount={flowSignalMonitor.activeCount}
         orderedSymbols={coreVisibleSymbols}
         heldSymbols={coreHeldSymbols}
         latestBySymbol={coreLatestBySymbol}

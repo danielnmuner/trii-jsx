@@ -22,19 +22,23 @@ import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { formatInteger, formatPercentFromWhole } from '../lib/formatters'
-import { coreSortPresets, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { coreSortPresets, hasPositiveFlowSignal, type CoreSortIntent } from '../lib/coreSymbolSorting'
 
 type AnalyticsHeroProps = {
   from?: string
   dataStatusLabel: string
   dataStatusTone: 'loading' | 'fetching' | 'live' | 'degraded'
+  flowAudioEnabled: boolean
+  onFlowAudioToggle: () => void
   to?: string
 }
 
 export function AnalyticsHero({
   dataStatusLabel,
   dataStatusTone,
+  flowAudioEnabled,
   from: _from,
+  onFlowAudioToggle,
   to: _to,
 }: AnalyticsHeroProps) {
   return (
@@ -48,14 +52,29 @@ export function AnalyticsHero({
           <h1>Analytics</h1>
         </div>
       </div>
+      <div className="analytics-topbar__meta">
+        <button
+          type="button"
+          className={clsx(
+            'analytics-topbar__toggle',
+            flowAudioEnabled ? 'is-live' : 'is-muted',
+          )}
+          onClick={onFlowAudioToggle}
+          aria-pressed={flowAudioEnabled}
+          aria-label={flowAudioEnabled ? 'Disable flow sound' : 'Enable flow sound'}
+        >
+          {flowAudioEnabled ? 'Sound On' : 'Sound Off'}
+        </button>
+      </div>
     </section>
   )
 }
 
 type AnalyticsFiltersProps = {
+  flowSignalCount: number
   orderedSymbols: string[]
   heldSymbols: string[]
-  latestBySymbol: Record<string, AnalyticsSymbolFeed['current_snapshot'] | undefined>
+  latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
   selectedSymbols: string[]
   symbols: string[]
   sortIntent: CoreSortIntent
@@ -73,9 +92,11 @@ type SymbolChipViewModel = {
   tone: SymbolChipTone
   price: string | null
   delta: string | null
+  hasFlowSignal: boolean
 }
 
 export function AnalyticsFilters({
+  flowSignalCount,
   orderedSymbols,
   heldSymbols,
   latestBySymbol,
@@ -107,7 +128,8 @@ export function AnalyticsFilters({
     () =>
       Object.fromEntries(
         displaySymbols.map((symbol) => {
-          const snapshot = latestBySymbol[symbol]
+          const feed = latestBySymbol[symbol]
+          const snapshot = feed?.current_snapshot
           const tone =
             typeof snapshot?.daily_change_amount === 'number'
               ? snapshot.daily_change_amount < 0
@@ -131,6 +153,7 @@ export function AnalyticsFilters({
                 snapshot?.daily_change_amount === null || snapshot?.daily_change_amount === undefined
                   ? null
                   : `${formatInteger(snapshot.daily_change_amount)} (${formatPercentFromWhole(snapshot.daily_change_percent)})`,
+              hasFlowSignal: hasPositiveFlowSignal(feed),
             },
           ]
         }),
@@ -187,7 +210,7 @@ export function AnalyticsFilters({
                 onClick={() => onSortIntentChange(preset.key)}
                 aria-pressed={isActive}
               >
-                {preset.label}
+                {preset.key === 'flow_z' ? `${preset.label} (${flowSignalCount})` : preset.label}
               </button>
             )
           })}
@@ -287,6 +310,7 @@ function SymbolChipCard({
         'symbol-chip',
         !dragEnabled && 'symbol-chip--static',
         model.isSelected && 'symbol-chip--selected',
+        model.hasFlowSignal && 'symbol-chip--flow-signal',
         isDragging && 'symbol-chip--dragging',
         isDraggingOverlay && 'symbol-chip--overlay',
       )}

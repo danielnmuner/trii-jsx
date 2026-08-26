@@ -3376,7 +3376,7 @@ button {
 
 .daily-close-chart {
   width: 100%;
-  height: 274px;
+  height: 286px;
   display: block;
 }
 
@@ -3399,7 +3399,7 @@ button {
 }
 
 .daily-close-chart__axisLine {
-  stroke: rgba(226, 233, 243, 0.16);
+  stroke: rgba(171, 189, 214, 0.15);
   stroke-width: 1;
 }
 
@@ -3407,16 +3407,53 @@ button {
   stroke: rgba(226, 233, 243, 0.12);
 }
 
+.daily-close-chart__axisLine--volume {
+  stroke: rgba(142, 165, 194, 0.09);
+}
+
 .daily-close-chart__gridLine {
-  stroke: rgba(226, 233, 243, 0.08);
+  stroke: rgba(120, 143, 172, 0.08);
   stroke-width: 1;
   stroke-dasharray: 3 5;
 }
 
 .daily-close-chart__focusLine {
-  stroke: rgba(244, 246, 248, 0.18);
+  stroke: rgba(122, 224, 255, 0.26);
   stroke-width: 1;
   stroke-dasharray: 3 4;
+}
+
+.daily-close-chart__volumeGuide {
+  stroke: rgba(120, 143, 172, 0.05);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+
+.daily-close-chart__band {
+  stroke-width: 0;
+}
+
+.daily-close-chart__band--upper {
+  fill: rgba(92, 68, 110, 0.18);
+}
+
+.daily-close-chart__band--middle {
+  fill: rgba(40, 104, 196, 0.2);
+}
+
+.daily-close-chart__band--lower {
+  fill: rgba(29, 95, 109, 0.18);
+}
+
+.daily-close-chart__volumeBar {
+  fill: rgba(84, 98, 122, 0.18);
+}
+
+.daily-close-chart__volumeLabel {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9px;
+  fill: rgba(226, 233, 243, 0.34);
+  letter-spacing: 0.01em;
 }
 
 .daily-close-chart__pointHit {
@@ -3608,27 +3645,71 @@ button {
 }
 
 .zscore-chart__axisLabel,
-.zscore-chart__refLabel {
+.zscore-chart__valueLabel,
+.zscore-chart__yLabel {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  fill: rgba(226, 233, 243, 0.58);
-  letter-spacing: 0.02em;
+  font-size: 9px;
+  fill: rgba(226, 233, 243, 0.38);
+  letter-spacing: 0.01em;
 }
 
 .zscore-chart__axisLabel--faint {
   fill: rgba(226, 233, 243, 0.32);
 }
 
-.zscore-chart__refLabel.positive {
-  fill: rgba(52, 211, 153, 0.72);
+.zscore-chart__axisLabel {
+  font-size: 10px;
+  fill: rgba(226, 233, 243, 0.58);
+  letter-spacing: 0.02em;
 }
 
-.zscore-chart__refLabel.negative {
-  fill: rgba(251, 113, 133, 0.72);
+.zscore-chart__axisLine {
+  stroke: rgba(171, 189, 214, 0.15);
+  stroke-width: 1;
 }
 
-.zscore-chart__refLabel.neutral {
-  fill: rgba(244, 246, 248, 0.54);
+.zscore-chart__axisLine--bottom {
+  stroke: rgba(226, 233, 243, 0.12);
+}
+
+.zscore-chart__axisLine--value {
+  stroke: rgba(142, 165, 194, 0.09);
+}
+
+.zscore-chart__gridLine {
+  stroke: rgba(120, 143, 172, 0.08);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.zscore-chart__valueGuide {
+  stroke: rgba(120, 143, 172, 0.05);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+
+.zscore-chart__band {
+  stroke-width: 0;
+}
+
+.zscore-chart__band--upper {
+  fill: rgba(92, 68, 110, 0.18);
+}
+
+.zscore-chart__band--middle {
+  fill: rgba(40, 104, 196, 0.2);
+}
+
+.zscore-chart__band--lower {
+  fill: rgba(29, 95, 109, 0.18);
+}
+
+.zscore-chart__valueBar {
+  fill: rgba(84, 98, 122, 0.18);
+}
+
+.zscore-chart__valueBar--signal {
+  fill: rgba(0, 236, 255, 0.42);
 }
 
 .zscore-tooltip {
@@ -3658,9 +3739,10 @@ button {
 }
 
 .zscore-tooltip__priceRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
 }
 
 .zscore-tooltip__priceValue {
@@ -3669,6 +3751,35 @@ button {
   font-size: 0.94rem;
   font-weight: 800;
   letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.zscore-tooltip__bucketRange {
+  display: grid;
+  gap: 1px;
+  align-self: start;
+  padding-top: 1px;
+}
+
+.zscore-tooltip__bucketValue {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.48rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.zscore-tooltip__bucketValue--max {
+  color: rgba(50, 235, 168, 0.92);
+}
+
+.zscore-tooltip__bucketValue--min {
+  color: rgba(255, 110, 136, 0.9);
+}
+
+.zscore-tooltip__bucketValue--flat {
+  color: rgba(198, 206, 220, 0.68);
 }
 
 .zscore-tooltip__delta {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ZscoreMetricSample, ZscoreOpportunityRecord } from '../api/schemas'
-import { formatMetricValue, formatNumber, formatPercentFromWhole, formatTimestamp } from '../lib/formatters'
+import { formatInteger, formatMetricValue, formatNumber, formatPercentFromWhole, formatTimestamp } from '../lib/formatters'
 import { buildZscoreOpportunityPrompt, copyTextToClipboard } from '../lib/zscoreOpportunityClipboard'
 import { SymbolIdentity } from './SymbolIdentity'
 
@@ -15,6 +15,11 @@ type ZscoreOpportunityPanelProps = {
   windows: ZscoreWindow[]
 }
 
+type ZscoreOpportunityBucketRange = ZscoreOpportunityRecord & {
+  bucket_min_last_price_10m?: number | null
+  bucket_max_last_price_10m?: number | null
+}
+
 const zscoreMetricOrder = ['obi_l1', 'obi_top_5', 'spread_bps', 'traded_value', 'traded_volume'] as const
 
 const zscoreMetricLabels: Record<(typeof zscoreMetricOrder)[number], string> = {
@@ -26,6 +31,40 @@ const zscoreMetricLabels: Record<(typeof zscoreMetricOrder)[number], string> = {
 }
 
 const zoomHoursOptions = [6, 12, 24, 48] as const
+
+function shouldHighlightOpportunityValueBar(record: ZscoreOpportunityRecord) {
+  const obiL1Zscore = record.triggered_z_scores?.obi_l1?.z_score
+  const obiTop5Zscore = record.triggered_z_scores?.obi_top_5?.z_score
+
+  return [obiL1Zscore, obiTop5Zscore].some(
+    (zScore) => typeof zScore === 'number' && !Number.isNaN(zScore) && Math.abs(zScore) >= 2,
+  )
+}
+
+function resolveLevelOnePrice(levels: ZscoreOpportunityRecord['bid_levels'] | ZscoreOpportunityRecord['ask_levels']) {
+  const price = levels?.[0]?.price
+  return typeof price === 'number' && !Number.isNaN(price) ? price : null
+}
+
+function resolveBestBidPrice(record: ZscoreOpportunityRecord) {
+  return typeof record.best_bid_price === 'number' && !Number.isNaN(record.best_bid_price)
+    ? record.best_bid_price
+    : resolveLevelOnePrice(record.bid_levels)
+}
+
+function resolveBestAskPrice(record: ZscoreOpportunityRecord) {
+  return typeof record.best_ask_price === 'number' && !Number.isNaN(record.best_ask_price)
+    ? record.best_ask_price
+    : resolveLevelOnePrice(record.ask_levels)
+}
+
+function resolveOpportunityTradedValue(record: ZscoreOpportunityRecord) {
+  if (typeof record.traded_value === 'number' && !Number.isNaN(record.traded_value)) {
+    return record.traded_value
+  }
+  const sampleValue = record.triggered_z_scores?.traded_value?.sample_value
+  return typeof sampleValue === 'number' && !Number.isNaN(sampleValue) ? sampleValue : 0
+}
 
 export function ZscoreOpportunityPanel({ windows }: ZscoreOpportunityPanelProps) {
   const visibleWindows = windows.filter((window) => window.records.length > 0)
@@ -75,6 +114,10 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
   }, [activeRecord, chart.points])
 
   const strongestPeriodSignal = useMemo(() => buildStrongestPeriodSignal(filteredRecords), [filteredRecords])
+  const chartThemeId = useMemo(
+    () => `zscore-${window.symbol.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    [window.symbol],
+  )
 
   useEffect(() => {
     if (!copyState) {
@@ -87,6 +130,33 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
 
     return () => globalThis.clearTimeout(timeoutId)
   }, [copyState])
+
+  useEffect(() => {
+    if (!activeChecksum) {
+      return undefined
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) {
+        setActiveChecksum(null)
+        return
+      }
+
+      if (target.closest('[data-zscore-point-hit="true"]')) {
+        return
+      }
+
+      if (target.closest('[data-zscore-tooltip="true"]')) {
+        return
+      }
+
+      setActiveChecksum(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [activeChecksum])
 
   async function handlePointCopy(record: ZscoreOpportunityRecord) {
     const key = record.snapshot_checksum || record.captured_at
@@ -141,26 +211,77 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
           onMouseLeave={() => setActiveChecksum(null)}
         >
           <defs>
-            <linearGradient id={`zscore-fill-${window.symbol}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(88, 179, 255, 0.24)" />
-              <stop offset="100%" stopColor="rgba(88, 179, 255, 0.02)" />
+            <linearGradient id={`${chartThemeId}-upper-band`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="rgba(255, 92, 212, 0.34)" />
+              <stop offset="100%" stopColor="rgba(113, 76, 255, 0.1)" />
             </linearGradient>
+            <linearGradient id={`${chartThemeId}-middle-band`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(45, 214, 255, 0.28)" />
+              <stop offset="100%" stopColor="rgba(65, 106, 255, 0.16)" />
+            </linearGradient>
+            <linearGradient id={`${chartThemeId}-lower-band`} x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(24, 255, 199, 0.24)" />
+              <stop offset="100%" stopColor="rgba(36, 143, 255, 0.09)" />
+            </linearGradient>
+            <linearGradient id={`${chartThemeId}-value-bar`} x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stopColor="rgba(28, 37, 55, 0.08)" />
+              <stop offset="100%" stopColor="rgba(91, 124, 196, 0.36)" />
+            </linearGradient>
+            <linearGradient id={`${chartThemeId}-value-bar-signal`} x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stopColor="rgba(0, 214, 255, 0.18)" />
+              <stop offset="100%" stopColor="rgba(0, 255, 255, 0.74)" />
+            </linearGradient>
+            <filter id={`${chartThemeId}-line-glow`} x="-20%" y="-30%" width="140%" height="160%">
+              <feGaussianBlur stdDeviation="2.6" result="blur" />
+              <feColorMatrix
+                in="blur"
+                type="matrix"
+                values="0 0 0 0 0.118  0 0 0 0 0.863  0 0 0 0 1  0 0 0 0.52 0"
+                result="glow"
+              />
+              <feMerge>
+                <feMergeNode in="glow" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
+          <line x1="44" y1="16" x2="44" y2="252" className="zscore-chart__axisLine" />
+          <line x1="612" y1="16" x2="612" y2="252" className="zscore-chart__axisLine zscore-chart__axisLine--value" />
+          <line x1="44" y1="252" x2="612" y2="252" className="zscore-chart__axisLine zscore-chart__axisLine--bottom" />
 
-          {chart.referenceLines.map((line) => (
-            <g key={line.key}>
+          {chart.valueBars.map((bar) => (
+            <rect
+              key={bar.key}
+              x={bar.x - bar.width / 2}
+              y={bar.y}
+              width={bar.width}
+              height={bar.height}
+              rx="2"
+              className={`zscore-chart__valueBar ${bar.isHighlighted ? 'zscore-chart__valueBar--signal' : ''}`}
+              fill={`url(#${bar.isHighlighted ? `${chartThemeId}-value-bar-signal` : `${chartThemeId}-value-bar`})`}
+            />
+          ))}
+
+          {chart.yTicks.map((tick) => (
+            <g key={tick.key}>
               <line
                 x1="44"
-                y1={line.y}
+                y1={tick.y}
                 x2="612"
-                y2={line.y}
-                stroke={line.color}
-                strokeWidth="1"
-                strokeDasharray="4 4"
-                opacity="0.82"
+                y2={tick.y}
+                className="zscore-chart__gridLine"
               />
-              <text x={line.textX} y={line.y - 4} textAnchor={line.textAnchor} className={`zscore-chart__refLabel ${line.className}`}>
-                {line.label}
+              <text x="10" y={tick.y + 3} textAnchor="start" className="zscore-chart__yLabel">
+                {tick.label}
+              </text>
+            </g>
+          ))}
+
+          {chart.valueTicks.map((tick) => (
+            <g key={tick.key}>
+              <line x1="44" y1={tick.y} x2="612" y2={tick.y} className="zscore-chart__valueGuide" />
+              <text x="636" y={tick.y + 3} textAnchor="end" className="zscore-chart__valueLabel">
+                {tick.label}
               </text>
             </g>
           ))}
@@ -177,14 +298,17 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
             </g>
           ))}
 
-          <path d={chart.areaPath} fill={`url(#zscore-fill-${window.symbol})`} />
+          <path d={chart.upperBandPath} className="zscore-chart__band zscore-chart__band--upper" fill={`url(#${chartThemeId}-upper-band)`} />
+          <path d={chart.middleBandPath} className="zscore-chart__band zscore-chart__band--middle" fill={`url(#${chartThemeId}-middle-band)`} />
+          <path d={chart.lowerBandPath} className="zscore-chart__band zscore-chart__band--lower" fill={`url(#${chartThemeId}-lower-band)`} />
           <path
-            d={chart.smoothPath}
+            d={chart.linePath}
             fill="none"
-            stroke="rgba(123, 194, 248, 0.62)"
-            strokeWidth="1.1"
+            stroke="rgba(113, 227, 255, 0.98)"
+            strokeWidth="1.45"
             strokeLinecap="round"
             strokeLinejoin="round"
+            filter={`url(#${chartThemeId}-line-glow)`}
           />
 
           {chart.points.map((point, pointIndex) => {
@@ -197,16 +321,16 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
                     cx={point.x}
                     cy={point.y}
                     r={2.7 + Math.min(point.metricCount, 5) * 0.2}
-                    fill="rgba(123, 194, 248, 0.045)"
+                    fill="rgba(0, 236, 255, 0.12)"
                   />
                 ) : null}
                 <circle
                   cx={point.x}
                   cy={point.y}
                   r={isActive ? 3.1 : 1.85}
-                  fill="rgba(138, 205, 255, 0.86)"
-                  stroke={isActive ? 'rgba(244,246,248,0.72)' : 'rgba(255,255,255,0.14)'}
-                  strokeWidth={isActive ? 0.7 : 0.32}
+                  fill={isActive ? 'rgba(179, 244, 255, 1)' : 'rgba(123, 232, 255, 0.98)'}
+                  stroke={isActive ? 'rgba(240, 252, 255, 0.92)' : 'rgba(123, 232, 255, 0.34)'}
+                  strokeWidth={isActive ? 0.78 : 0.4}
                 />
                 <circle
                   cx={point.x}
@@ -214,6 +338,7 @@ function ZscoreOpportunityCard({ window }: { window: ZscoreWindow }) {
                   r={10}
                   fill="transparent"
                   className="zscore-chart__pointHit"
+                  data-zscore-point-hit="true"
                   data-testid="zscore-copy-hit"
                   role="button"
                   aria-label={`Copy AI prompt for ${window.symbol} at ${pointRecord?.captured_at ?? point.key}`}
@@ -275,8 +400,18 @@ function ZscorePointTooltip({
   record: ZscoreOpportunityRecord
   point: { x: number; y: number }
 }) {
+  const recordWithBucketRange = record as ZscoreOpportunityBucketRange
   const dailyChangeTone =
     typeof record.daily_change_amount === 'number' && record.daily_change_amount < 0 ? 'negative' : 'positive'
+  const bucketMin =
+    typeof recordWithBucketRange.bucket_min_last_price_10m === 'number' && !Number.isNaN(recordWithBucketRange.bucket_min_last_price_10m)
+      ? recordWithBucketRange.bucket_min_last_price_10m
+      : null
+  const bucketMax =
+    typeof recordWithBucketRange.bucket_max_last_price_10m === 'number' && !Number.isNaN(recordWithBucketRange.bucket_max_last_price_10m)
+      ? recordWithBucketRange.bucket_max_last_price_10m
+      : null
+  const bucketRangeTone = bucketMin !== null && bucketMax !== null && bucketMin === bucketMax ? 'flat' : 'range'
   const pointMetrics = zscoreMetricOrder
     .map((metricKey) => ({
       metricKey,
@@ -301,11 +436,22 @@ function ZscorePointTooltip({
   return (
     <div
       className="zscore-tooltip"
+      data-zscore-tooltip="true"
       style={style}
     >
       <div className="zscore-tooltip__timestamp">{formatTimestamp(record.captured_at)}</div>
       <div className="zscore-tooltip__priceRow">
         <strong className="zscore-tooltip__priceValue">{formatMetricValue('last_price', record.last_price)}</strong>
+        {bucketMin !== null || bucketMax !== null ? (
+          <span className="zscore-tooltip__bucketRange">
+            <span className={`zscore-tooltip__bucketValue zscore-tooltip__bucketValue--${bucketRangeTone === 'flat' ? 'flat' : 'max'}`}>
+              {formatMetricValue('last_price', bucketMax)}
+            </span>
+            <span className={`zscore-tooltip__bucketValue zscore-tooltip__bucketValue--${bucketRangeTone === 'flat' ? 'flat' : 'min'}`}>
+              {formatMetricValue('last_price', bucketMin)}
+            </span>
+          </span>
+        ) : null}
       </div>
       <div className={`zscore-tooltip__delta zscore-tooltip__delta--${dailyChangeTone}`}>
         {formatMetricValue('last_price', record.daily_change_amount)} ({formatPercentFromWhole(record.daily_change_percent)})
@@ -335,11 +481,15 @@ function ZscorePointTooltip({
 function buildZscoreChart(records: ZscoreOpportunityRecord[]) {
   if (records.length === 0) {
     return {
-      smoothPath: '',
-      areaPath: '',
+      linePath: '',
+      upperBandPath: '',
+      middleBandPath: '',
+      lowerBandPath: '',
       points: [],
-      referenceLines: [],
       xTicks: [],
+      yTicks: [],
+      valueTicks: [],
+      valueBars: [],
     }
   }
 
@@ -350,17 +500,8 @@ function buildZscoreChart(records: ZscoreOpportunityRecord[]) {
   const chartWidth = chartRight - chartLeft
   const chartHeight = chartBottom - chartTop
 
-  const timestamps = records.map((record) => new Date(record.captured_at).getTime()).filter((value) => !Number.isNaN(value))
-  const minTime = Math.min(...timestamps)
-  const maxTime = Math.max(...timestamps)
-  const timeDomain = maxTime - minTime || 1
-
-  const latestRecord = records[records.length - 1]
   const referenceValues = [
-    latestRecord?.previous_close,
-    latestRecord?.high_price,
-    latestRecord?.low_price,
-    ...records.map((record) => record.last_price),
+    ...records.flatMap((record) => [record.high_price, resolveBestAskPrice(record), resolveBestBidPrice(record), record.low_price, record.last_price]),
   ].filter((value): value is number => typeof value === 'number' && !Number.isNaN(value))
 
   const minValue = Math.min(...referenceValues)
@@ -369,13 +510,20 @@ function buildZscoreChart(records: ZscoreOpportunityRecord[]) {
   const yMin = minValue - padding
   const yMax = maxValue + padding
   const yDomain = yMax - yMin || 1
+  const tradedValueMax = Math.max(
+    ...records.map((record) => resolveOpportunityTradedValue(record)),
+    1,
+  )
 
   const points = records.map((record, index) => {
-    const timeValue = new Date(record.captured_at).getTime()
-    const xRatio = Number.isNaN(timeValue) ? index / Math.max(records.length - 1, 1) : (timeValue - minTime) / timeDomain
+    const xRatio = records.length === 1 ? 0.5 : index / Math.max(records.length - 1, 1)
     const x = chartLeft + xRatio * chartWidth
     const lastPrice = typeof record.last_price === 'number' ? record.last_price : yMin
     const y = chartBottom - ((lastPrice - yMin) / yDomain) * chartHeight
+    const tradedValue = resolveOpportunityTradedValue(record)
+    const bestAskPrice = resolveBestAskPrice(record)
+    const bestBidPrice = resolveBestBidPrice(record)
+    const barHeight = tradedValueMax <= 0 ? 0 : Math.max(1.5, (tradedValue / tradedValueMax) * chartHeight)
     const metrics = zscoreMetricOrder
       .map((metricKey) => record.triggered_z_scores?.[metricKey])
       .filter((metric): metric is ZscoreMetricSample => Boolean(metric))
@@ -383,27 +531,48 @@ function buildZscoreChart(records: ZscoreOpportunityRecord[]) {
       key: record.snapshot_checksum || record.captured_at,
       x,
       y,
+      highY: chartBottom - (((typeof record.high_price === 'number' ? record.high_price : yMin) - yMin) / yDomain) * chartHeight,
+      askY: chartBottom - ((((typeof bestAskPrice === 'number' ? bestAskPrice : yMin) - yMin) / yDomain) * chartHeight),
+      bidY: chartBottom - ((((typeof bestBidPrice === 'number' ? bestBidPrice : yMin) - yMin) / yDomain) * chartHeight),
+      lowY: chartBottom - (((typeof record.low_price === 'number' ? record.low_price : yMin) - yMin) / yDomain) * chartHeight,
+      valueY: chartBottom - barHeight,
+      valueHeight: barHeight,
       metricCount: metrics.filter((metric) => typeof metric.z_score === 'number').length,
     }
   })
 
-  const smoothPath = buildSmoothPath(points.map((point) => ({ x: point.x, y: point.y })))
-  const areaPath = `${smoothPath} L ${points[points.length - 1].x.toFixed(2)} ${chartBottom} L ${points[0].x.toFixed(2)} ${chartBottom} Z`
-
-  const referenceLines = [
-    buildReferenceLine('previous_close', latestRecord?.previous_close, yMin, yDomain, chartTop, chartBottom, 'Prev Close', 'rgba(244,246,248,0.36)', 'neutral', 'left'),
-    buildReferenceLine('high_price', latestRecord?.high_price, yMin, yDomain, chartTop, chartBottom, 'High', 'rgba(52,211,153,0.32)', 'positive'),
-    buildReferenceLine('low_price', latestRecord?.low_price, yMin, yDomain, chartTop, chartBottom, 'Low', 'rgba(251,113,133,0.32)', 'negative'),
-  ].filter(Boolean) as Array<{ key: string; y: number; label: string; color: string; className: string; textX: number; textAnchor: 'start' | 'end' }>
-
-  const xTicks = buildTimeTicks(records, minTime, timeDomain, chartLeft, chartWidth)
+  const xTicks = buildTimeTicks(records, chartLeft, chartWidth)
+  const valueBarWidth = computeDynamicBarWidth(
+    points.map((point) => point.x),
+    chartWidth,
+  )
 
   return {
-    smoothPath,
-    areaPath,
+    linePath: buildSubtleSmoothedPath(points.map((point) => ({ x: point.x, y: point.y }))),
+    upperBandPath: buildBandPath(
+      points.map((point) => ({ x: point.x, y: point.askY })),
+      points.map((point) => ({ x: point.x, y: point.highY })),
+    ),
+    middleBandPath: buildBandPath(
+      points.map((point) => ({ x: point.x, y: point.bidY })),
+      points.map((point) => ({ x: point.x, y: point.askY })),
+    ),
+    lowerBandPath: buildBandPath(
+      points.map((point) => ({ x: point.x, y: point.bidY })),
+      points.map((point) => ({ x: point.x, y: point.lowY })),
+    ),
     points,
-    referenceLines,
     xTicks,
+    yTicks: buildPriceTicks(yMin, yMax, chartTop, chartBottom),
+    valueTicks: buildValueTicks(tradedValueMax, chartTop, chartBottom),
+    valueBars: points.map((point, index) => ({
+      key: point.key,
+      x: point.x,
+      y: point.valueY,
+      width: valueBarWidth,
+      height: point.valueHeight,
+      isHighlighted: shouldHighlightOpportunityValueBar(records[index]),
+    })),
   }
 }
 
@@ -430,41 +599,13 @@ function buildStrongestPeriodSignal(records: ZscoreOpportunityRecord[]) {
   return strongest
 }
 
-function buildReferenceLine(
-  key: string,
-  value: number | null | undefined,
-  yMin: number,
-  yDomain: number,
-  chartTop: number,
-  chartBottom: number,
-  label: string,
-  color: string,
-  className: string,
-  align: 'left' | 'right' = 'right',
-) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null
-  }
-
-  return {
-    key,
-    y: chartBottom - ((value - yMin) / yDomain) * (chartBottom - chartTop),
-    label: `${label} ${formatMetricValue('last_price', value)}`,
-    color,
-    className,
-    textX: align === 'left' ? 48 : 608,
-    textAnchor: align === 'left' ? ('start' as const) : ('end' as const),
-  }
-}
-
-function buildTimeTicks(records: ZscoreOpportunityRecord[], minTime: number, timeDomain: number, chartLeft: number, chartWidth: number) {
+function buildTimeTicks(records: ZscoreOpportunityRecord[], chartLeft: number, chartWidth: number) {
   const tickIndexes = Array.from(
     new Set([0, Math.floor((records.length - 1) * 0.25), Math.floor((records.length - 1) * 0.5), Math.floor((records.length - 1) * 0.75), records.length - 1]),
   )
   return tickIndexes.map((index) => {
     const record = records[index]
-    const timeValue = new Date(record.captured_at).getTime()
-    const xRatio = Number.isNaN(timeValue) ? index / Math.max(records.length - 1, 1) : (timeValue - minTime) / (timeDomain || 1)
+    const xRatio = records.length === 1 ? 0.5 : index / Math.max(records.length - 1, 1)
     return {
       key: `${record.captured_at}-${index}`,
       x: chartLeft + xRatio * chartWidth,
@@ -483,29 +624,108 @@ function buildTimeTicks(records: ZscoreOpportunityRecord[], minTime: number, tim
   })
 }
 
-function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+function buildLinearPath(points: Array<{ x: number; y: number }>) {
   if (points.length === 0) {
     return ''
   }
-  if (points.length === 1) {
-    return `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`
+
+  return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+}
+
+function buildSubtleSmoothedPath(points: Array<{ x: number; y: number }>) {
+  if (points.length < 3) {
+    return buildLinearPath(points)
   }
 
+  const smoothing = 0.16
   let path = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`
+
   for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = points[index - 1] ?? points[index]
-    const p1 = points[index]
-    const p2 = points[index + 1]
-    const p3 = points[index + 2] ?? p2
+    const previous = points[index - 1] ?? points[index]
+    const current = points[index]
+    const next = points[index + 1]
+    const following = points[index + 2] ?? next
 
-    const cp1x = p1.x + (p2.x - p0.x) / 6
-    const cp1y = p1.y + (p2.y - p0.y) / 6
-    const cp2x = p2.x - (p3.x - p1.x) / 6
-    const cp2y = p2.y - (p3.y - p1.y) / 6
+    const controlPoint1 = {
+      x: current.x + ((next.x - previous.x) * smoothing),
+      y: current.y + ((next.y - previous.y) * smoothing),
+    }
+    const controlPoint2 = {
+      x: next.x - ((following.x - current.x) * smoothing),
+      y: next.y - ((following.y - current.y) * smoothing),
+    }
 
-    path += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`
+    path += ` C ${controlPoint1.x.toFixed(2)} ${controlPoint1.y.toFixed(2)}, ${controlPoint2.x.toFixed(2)} ${controlPoint2.y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`
   }
+
   return path
+}
+
+function buildBandPath(upper: Array<{ x: number; y: number }>, lower: Array<{ x: number; y: number }>) {
+  if (upper.length === 0 || lower.length === 0) {
+    return ''
+  }
+
+  const top = upper.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+  const bottom = [...lower]
+    .reverse()
+    .map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ')
+
+  return `${top} ${bottom} Z`
+}
+
+function buildPriceTicks(yMin: number, yMax: number, chartTop: number, chartBottom: number) {
+  const tickCount = 4
+  const range = yMax - yMin || 1
+
+  return Array.from({ length: tickCount }, (_, index) => {
+    const ratio = index / (tickCount - 1)
+    const value = yMax - ratio * range
+    const y = chartTop + ratio * (chartBottom - chartTop)
+
+    return {
+      key: `y-${index}`,
+      y,
+      label: formatInteger(value),
+    }
+  })
+}
+
+function buildValueTicks(tradedValueMax: number, chartTop: number, chartBottom: number) {
+  const tickValues = [tradedValueMax, tradedValueMax * 0.5, 0]
+
+  return tickValues.map((value, index) => {
+    const ratio = tradedValueMax <= 0 ? 0 : value / tradedValueMax
+    const y = chartBottom - ratio * (chartBottom - chartTop)
+
+    return {
+      key: `v-${index}`,
+      y,
+      label: formatMagnitude(value),
+    }
+  })
+}
+
+function computeDynamicBarWidth(xs: number[], chartWidth: number) {
+  if (xs.length <= 1) {
+    return Math.max(2, chartWidth * 0.05)
+  }
+
+  let minGap = Number.POSITIVE_INFINITY
+
+  for (let index = 1; index < xs.length; index += 1) {
+    const gap = xs[index] - xs[index - 1]
+    if (gap > 0 && gap < minGap) {
+      minGap = gap
+    }
+  }
+
+  if (!Number.isFinite(minGap)) {
+    return Math.max(1.25, chartWidth / Math.max(xs.length * 2.4, 1))
+  }
+
+  return Math.max(1.1, minGap * 0.72)
 }
 
 function formatSampleMetric(metricKey: (typeof zscoreMetricOrder)[number], value: number | null | undefined) {

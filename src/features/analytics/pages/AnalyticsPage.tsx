@@ -80,7 +80,6 @@ export function AnalyticsPage() {
       rankCoreSymbols({
         baseOrder: symbolOrder,
         latestBySymbol: Object.fromEntries(snapshotsQuery.results.map((result) => [result.symbol, result.current_snapshot])),
-        latestZscoreBySymbol,
         intent: coreSortIntent,
       }),
     [coreSortIntent, latestZscoreBySymbol, snapshotsQuery.results, symbolOrder],
@@ -226,6 +225,19 @@ export function AnalyticsPage() {
     [eligibleOverviewResults],
   )
 
+  const freezeCurrentCoreOrder = () => {
+    setSymbolOrder((currentOrder) => {
+      if (
+        rankedSymbolOrder.length === currentOrder.length &&
+        rankedSymbolOrder.every((symbol, index) => symbol === currentOrder[index])
+      ) {
+        return currentOrder
+      }
+
+      return rankedSymbolOrder
+    })
+  }
+
   const handleCoreSelectedSymbolsChange = (nextVisibleSelectedSymbols: string[]) => {
     setSelectedSymbols((current) => {
       const hiddenSelections = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
@@ -245,11 +257,24 @@ export function AnalyticsPage() {
       return
     }
 
+    freezeCurrentCoreOrder()
     setCoreSortIntent('held')
     setSelectedSymbols((current) => {
       const hiddenSelections = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
       return [...hiddenSelections, ...coreHeldSymbols]
     })
+  }
+
+  const handleCoreSortIntentChange = (nextIntent: CoreSortIntent) => {
+    if (nextIntent === coreSortIntent) {
+      return
+    }
+
+    if (nextIntent === 'manual' || nextIntent === 'held') {
+      freezeCurrentCoreOrder()
+    }
+
+    setCoreSortIntent(nextIntent)
   }
 
   const hasCatalogData = symbols.length > 0
@@ -402,7 +427,7 @@ export function AnalyticsPage() {
         sortIntent={coreSortIntent}
         onSelectedSymbolsChange={handleCoreSelectedSymbolsChange}
         onSymbolOrderChange={handleCoreSymbolOrderChange}
-        onSortIntentChange={setCoreSortIntent}
+        onSortIntentChange={handleCoreSortIntentChange}
         onOwnedSymbolsSelect={handleOwnedSymbolsSelect}
       />
 

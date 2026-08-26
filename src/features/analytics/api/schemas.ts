@@ -189,6 +189,12 @@ export const zscoreOpportunityRecordSchema = z
     previous_close: z.number().nullable().optional(),
     high_price: z.number().nullable().optional(),
     low_price: z.number().nullable().optional(),
+    best_bid_price: z.number().nullable().optional(),
+    best_ask_price: z.number().nullable().optional(),
+    traded_value: z.number().nullable().optional(),
+    traded_volume: z.number().nullable().optional(),
+    bid_levels: z.array(depthLevelSchema).optional(),
+    ask_levels: z.array(depthLevelSchema).optional(),
     triggered_z_scores: z
       .object({
         obi_l1: zscoreMetricSampleSchema.optional(),

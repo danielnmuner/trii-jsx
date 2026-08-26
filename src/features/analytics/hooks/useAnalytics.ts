@@ -9,6 +9,11 @@ import {
 } from '../api/client'
 import { ANALYTICS_REALTIME_REFETCH_MS } from '../config'
 import type { AnalyticsSymbolFeed, DailyClosingRecord, HistoricStat, SeasonalityProfile, ZscoreOpportunityRecord } from '../api/schemas'
+import {
+  filterDailyClosingRecords,
+  filterZscoreOpportunityRecords,
+  sanitizeAnalyticsSymbolFeed,
+} from '../lib/analyticsDataPolicy'
 
 export function useAnalyticsCatalog() {
   return useQuery({
@@ -43,6 +48,7 @@ export function useAnalyticsSnapshots(symbols: string[]) {
   return useMemo(() => {
     const results = queries
       .map((query) => query.data)
+      .map((item) => (item ? sanitizeAnalyticsSymbolFeed(item) : null))
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
     const lastUpdatedAt = queries.reduce((maxValue, query) => Math.max(maxValue, query.dataUpdatedAt ?? 0), 0)
 
@@ -167,7 +173,7 @@ function mergeZscoreWindowRecords(currentRecords: ZscoreOpportunityRecord[], pre
     (left, right) => new Date(left.captured_at).getTime() - new Date(right.captured_at).getTime(),
   )
 
-  return sorted
+  return filterZscoreOpportunityRecords(sorted)
 }
 
 function toPreviousDate(value: string) {
@@ -181,7 +187,8 @@ function toPreviousDate(value: string) {
 }
 
 function sortDailyClosingRecords(records: DailyClosingRecord[]) {
-  return [...records].sort((left, right) => {
+  return filterDailyClosingRecords(records)
+    .sort((left, right) => {
     const leftTime = new Date(left.source_captured_at ?? `${left.trading_date}T00:00:00-05:00`).getTime()
     const rightTime = new Date(right.source_captured_at ?? `${right.trading_date}T00:00:00-05:00`).getTime()
 
@@ -190,5 +197,5 @@ function sortDailyClosingRecords(records: DailyClosingRecord[]) {
     }
 
     return left.trading_date.localeCompare(right.trading_date)
-  })
+    })
 }

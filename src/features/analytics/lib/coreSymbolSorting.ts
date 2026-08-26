@@ -17,17 +17,15 @@ export type CoreSortIntent = (typeof coreSortPresets)[number]['key']
 type RankCoreSymbolsArgs = {
   baseOrder: string[]
   latestBySymbol: Record<string, AnalyticsSymbolFeed['current_snapshot'] | undefined>
-  latestZscoreBySymbol: Record<string, ZscoreOpportunityRecord | undefined>
   intent: CoreSortIntent
 }
 
 export function rankCoreSymbols({
   baseOrder,
   latestBySymbol,
-  latestZscoreBySymbol,
   intent,
 }: RankCoreSymbolsArgs) {
-  if (intent === 'manual') {
+  if (intent === 'manual' || intent === 'held') {
     return baseOrder
   }
 
@@ -38,7 +36,6 @@ export function rankCoreSymbols({
       left,
       right,
       latestBySymbol,
-      latestZscoreBySymbol,
       intent,
     })
 
@@ -54,28 +51,13 @@ function compareSymbolsByIntent({
   left,
   right,
   latestBySymbol,
-  latestZscoreBySymbol,
   intent,
 }: {
   left: string
   right: string
   latestBySymbol: Record<string, AnalyticsSymbolFeed['current_snapshot'] | undefined>
-  latestZscoreBySymbol: Record<string, ZscoreOpportunityRecord | undefined>
   intent: Exclude<CoreSortIntent, 'manual'>
 }) {
-  if (intent === 'held') {
-    const leftQuantity = resolveAvailableQuantity(latestBySymbol[left], latestZscoreBySymbol[left])
-    const rightQuantity = resolveAvailableQuantity(latestBySymbol[right], latestZscoreBySymbol[right])
-    const leftHasInventory = leftQuantity > 0 ? 1 : 0
-    const rightHasInventory = rightQuantity > 0 ? 1 : 0
-
-    if (leftHasInventory !== rightHasInventory) {
-      return rightHasInventory - leftHasInventory
-    }
-
-    return rightQuantity - leftQuantity
-  }
-
   if (intent === 'up') {
     return compareNumbersDesc(
       latestBySymbol[left]?.daily_change_percent,

@@ -89,10 +89,8 @@ type AnalyticsFiltersProps = {
   orderedSymbols: string[]
   heldSymbols: string[]
   latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
-  selectedSymbols: string[]
   symbols: string[]
   sortIntent: CoreSortIntent
-  onSelectedSymbolsChange: (symbols: string[]) => void
   onSymbolOrderChange: (symbols: string[]) => void
   onSortIntentChange: (intent: CoreSortIntent) => void
   onOwnedSymbolsSelect: () => void
@@ -114,15 +112,12 @@ export function AnalyticsFilters({
   orderedSymbols,
   heldSymbols,
   latestBySymbol,
-  selectedSymbols,
   symbols,
   sortIntent,
-  onSelectedSymbolsChange,
   onSymbolOrderChange,
   onSortIntentChange,
   onOwnedSymbolsSelect,
 }: AnalyticsFiltersProps) {
-  const selectedSet = new Set(selectedSymbols)
   const displaySymbols = orderedSymbols.length > 0 ? orderedSymbols : symbols
   const [activeDragSymbol, setActiveDragSymbol] = useState<string | null>(null)
   const dragEnabled = sortIntent === 'manual'
@@ -157,7 +152,7 @@ export function AnalyticsFilters({
             symbol,
             {
               symbol,
-              isSelected: selectedSet.has(symbol),
+              isSelected: true,
               tone,
               price:
                 snapshot?.last_price === null || snapshot?.last_price === undefined
@@ -172,16 +167,10 @@ export function AnalyticsFilters({
           ]
         }),
       ),
-    [displaySymbols, latestBySymbol, selectedSet],
+    [displaySymbols, latestBySymbol],
   )
 
   const activeChip = activeDragSymbol ? chipModels[activeDragSymbol] : null
-
-  const toggleCoreSymbol = (symbol: string) => {
-    const isSelected = selectedSymbols.includes(symbol)
-    const nextSymbols = isSelected ? selectedSymbols.filter((item) => item !== symbol) : [...selectedSymbols, symbol]
-    onSelectedSymbolsChange(nextSymbols.length > 0 ? nextSymbols : [symbol])
-  }
 
   const handleDragStart = (event: DragStartEvent) => {
     if (!dragEnabled) {
@@ -245,7 +234,6 @@ export function AnalyticsFilters({
                   key={`core-${symbol}`}
                   dragEnabled={dragEnabled}
                   model={chipModels[symbol]}
-                  onToggle={toggleCoreSymbol}
                 />
               ))}
             </div>
@@ -263,11 +251,9 @@ export function AnalyticsFilters({
 function SortableSymbolChip({
   dragEnabled,
   model,
-  onToggle,
 }: {
   dragEnabled: boolean
   model: SymbolChipViewModel
-  onToggle: (symbol: string) => void
 }) {
   const {
     attributes,
@@ -294,7 +280,6 @@ function SortableSymbolChip({
         dragEnabled={dragEnabled}
         dragListeners={listeners}
         isDragging={isDragging}
-        onToggle={onToggle}
       />
     </div>
   )
@@ -307,7 +292,6 @@ function SymbolChipCard({
   dragListeners,
   isDragging = false,
   isDraggingOverlay = false,
-  onToggle,
 }: {
   model: SymbolChipViewModel
   dragAttributes?: DraggableAttributes
@@ -315,7 +299,6 @@ function SymbolChipCard({
   dragListeners?: ReturnType<typeof useSortable>['listeners']
   isDragging?: boolean
   isDraggingOverlay?: boolean
-  onToggle?: (symbol: string) => void
 }) {
   return (
     <button
@@ -328,8 +311,6 @@ function SymbolChipCard({
         isDragging && 'symbol-chip--dragging',
         isDraggingOverlay && 'symbol-chip--overlay',
       )}
-      aria-pressed={model.isSelected}
-      onClick={onToggle ? () => onToggle(model.symbol) : undefined}
       {...dragAttributes}
       {...dragListeners}
     >

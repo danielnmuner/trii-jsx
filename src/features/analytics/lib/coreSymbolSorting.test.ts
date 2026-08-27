@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
+import type { OrderPositionSummary } from './orderPosition'
 import { collectFlowSignalSymbols, rankCoreSymbols } from './coreSymbolSorting'
 
 function createSnapshot(overrides: Partial<AnalyticsSymbolFeed['current_snapshot']> = {}): AnalyticsSymbolFeed['current_snapshot'] {
@@ -39,24 +40,34 @@ function createFeed({
   }
 }
 
+function createPositionSummary(overrides: Partial<OrderPositionSummary> = {}): OrderPositionSummary {
+  return {
+    symbol: overrides.symbol ?? 'TEST',
+    availableQuantity: overrides.availableQuantity ?? 0,
+    weightedAveragePrice: overrides.weightedAveragePrice ?? null,
+    deltaValue: overrides.deltaValue ?? null,
+    deltaPct: overrides.deltaPct ?? null,
+  }
+}
+
 describe('rankCoreSymbols', () => {
-  it('prioritizes held inventory first using snapshot or z-score fallback', () => {
+  it('sorts held inventory by invested capital descending using FIFO order summaries', () => {
     const ordered = rankCoreSymbols({
       baseOrder: ['AAA', 'BBB', 'CCC'],
       latestBySymbol: {
         AAA: createFeed({ snapshot: { symbol: 'AAA' } }),
-        BBB: createFeed({
-          snapshot: {
-            symbol: 'BBB',
-            approved_position_summary: { available_quantity: 25 },
-          } as Partial<AnalyticsSymbolFeed['current_snapshot']>,
-        }),
+        BBB: createFeed({ snapshot: { symbol: 'BBB' } }),
         CCC: createFeed({ snapshot: { symbol: 'CCC' } }),
+      },
+      orderPositionsBySymbol: {
+        AAA: createPositionSummary({ symbol: 'AAA', availableQuantity: 12, weightedAveragePrice: 1_000 }),
+        BBB: createPositionSummary({ symbol: 'BBB', availableQuantity: 25, weightedAveragePrice: 2_000 }),
+        CCC: createPositionSummary({ symbol: 'CCC', availableQuantity: 5, weightedAveragePrice: 5_000 }),
       },
       intent: 'held',
     })
 
-    expect(ordered).toEqual(['AAA', 'BBB', 'CCC'])
+    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
   })
 
   it('sorts by daily change percent descending for up intent', () => {

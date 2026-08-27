@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DailyClosingRecord } from '../api/schemas'
+import type { DailyOrderPositionSummary } from '../lib/orderPosition'
 import {
   formatCurrency,
   formatInteger,
@@ -19,18 +20,25 @@ type DailyClosingWindow = {
 
 type DailyClosingPanelProps = {
   windows: DailyClosingWindow[]
+  orderTimelineBySymbol?: Record<string, Record<string, DailyOrderPositionSummary | undefined>>
 }
 
 const dailyClosingRangeOptions = [365, 180, 90, 30, 15, 7] as const
 
-export function DailyClosingPanel({ windows }: DailyClosingPanelProps) {
+export function DailyClosingPanel({ windows, orderTimelineBySymbol = {} }: DailyClosingPanelProps) {
   const [rangeDays, setRangeDays] = useState<(typeof dailyClosingRangeOptions)[number]>(365)
   const visibleWindows = windows.filter((window) => window.records.length > 0)
 
   return (
     <section className="daily-close-grid" aria-label="Daily closing charts">
       {visibleWindows.map((window) => (
-        <DailyClosingCard key={window.symbol} window={window} rangeDays={rangeDays} onChangeRangeDays={setRangeDays} />
+        <DailyClosingCard
+          key={window.symbol}
+          window={window}
+          rangeDays={rangeDays}
+          onChangeRangeDays={setRangeDays}
+          orderTimeline={orderTimelineBySymbol[window.symbol] ?? {}}
+        />
       ))}
     </section>
   )
@@ -40,10 +48,12 @@ function DailyClosingCard({
   window,
   rangeDays,
   onChangeRangeDays,
+  orderTimeline,
 }: {
   window: DailyClosingWindow
   rangeDays: (typeof dailyClosingRangeOptions)[number]
   onChangeRangeDays: (value: (typeof dailyClosingRangeOptions)[number]) => void
+  orderTimeline: Record<string, DailyOrderPositionSummary | undefined>
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const chartThemeId = useMemo(
@@ -131,7 +141,13 @@ function DailyClosingCard({
       </header>
 
       <div className="daily-close-card__chartShell">
-        {activeRecord && activePoint ? <DailyClosingTooltip record={activeRecord} point={activePoint} /> : null}
+        {activeRecord && activePoint ? (
+          <DailyClosingTooltip
+            record={activeRecord}
+            point={activePoint}
+            orderSummary={orderTimeline[activeRecord.trading_date] ?? null}
+          />
+        ) : null}
         {filteredRecords.length === 0 ? <div className="zscore-chart__empty">No records in selected window</div> : null}
 
         <svg
@@ -139,7 +155,13 @@ function DailyClosingCard({
           viewBox="0 0 640 280"
           preserveAspectRatio="none"
           aria-label={`${window.symbol} daily closing chart`}
-          onMouseLeave={() => setActiveKey(null)}
+          onMouseLeave={(event) => {
+            const relatedTarget = event.relatedTarget
+            if (relatedTarget instanceof Element && relatedTarget.closest('[data-daily-close-tooltip="true"]')) {
+              return
+            }
+            setActiveKey(null)
+          }}
         >
           <defs>
             <linearGradient id={`${chartThemeId}-volume-bar`} x1="0%" y1="100%" x2="0%" y2="0%">
@@ -239,8 +261,32 @@ function DailyClosingCard({
 
           {chart.points.map((point) => {
             const isActive = point.key === activeKey
+            const orderSummary = orderTimeline[point.tradingDate]
+            const hasBuyOrders = (orderSummary?.buyCount ?? 0) > 0
+            const hasSellOrders = (orderSummary?.sellCount ?? 0) > 0
+
             return (
               <g key={point.key}>
+                {hasBuyOrders ? (
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={isActive ? 5.7 : 4.8}
+                    fill="none"
+                    stroke="rgba(62, 255, 162, 0.92)"
+                    strokeWidth={isActive ? 0.92 : 0.72}
+                  />
+                ) : null}
+                {hasSellOrders ? (
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={hasBuyOrders ? (isActive ? 7.1 : 6.2) : isActive ? 5.7 : 4.8}
+                    fill="none"
+                    stroke="rgba(255, 82, 118, 0.96)"
+                    strokeWidth={isActive ? 0.98 : 0.76}
+                  />
+                ) : null}
                 <circle
                   cx={point.x}
                   cy={point.y}
@@ -279,30 +325,30 @@ function DailyClosingCard({
 function DailyClosingTooltip({
   record,
   point,
+  orderSummary,
 }: {
   record: DailyClosingRecord
   point: { x: number; y: number }
+  orderSummary: DailyOrderPositionSummary | null
 }) {
   const dailyTone =
     typeof record.daily_change_amount === 'number' && record.daily_change_amount < 0 ? 'negative' : 'positive'
   const alignRight = point.x > 436
   const alignBelow = point.y < 112
-  const tooltipWidth = 236
-  const tooltipHeight = 184
+  const tooltipWidth = 244
+  const tooltipHeight = 228
   const horizontalStyle = alignRight
     ? `clamp(8px, calc(${((point.x / 640) * 100).toFixed(3)}% - ${tooltipWidth + 12}px), calc(100% - ${tooltipWidth + 8}px))`
     : `clamp(8px, ${((point.x / 640) * 100).toFixed(3)}%, calc(100% - ${tooltipWidth + 8}px))`
   const verticalStyle = alignBelow
     ? `clamp(8px, calc(${((point.y / 280) * 100).toFixed(3)}% + 12px), calc(100% - ${tooltipHeight + 8}px))`
     : `clamp(8px, calc(${((point.y / 280) * 100).toFixed(3)}% - ${tooltipHeight + 12}px), calc(100% - ${tooltipHeight + 8}px))`
-  const upsideAbsolute =
-    typeof record.high_price === 'number' && typeof record.last_price === 'number' ? record.high_price - record.last_price : null
-  const downsideAbsolute =
-    typeof record.low_price === 'number' && typeof record.last_price === 'number' ? record.low_price - record.last_price : null
-  const upsideRelative =
-    upsideAbsolute !== null && typeof record.last_price === 'number' && record.last_price !== 0 ? upsideAbsolute / record.last_price : null
-  const downsideRelative =
-    downsideAbsolute !== null && typeof record.last_price === 'number' && record.last_price !== 0 ? downsideAbsolute / record.last_price : null
+  const realizedProfitTone = (orderSummary?.realizedProfit ?? 0) < 0 ? 'negative' : 'positive'
+  const hasOrderInventory = Boolean(orderSummary)
+  const vsLastLabel =
+    !orderSummary || orderSummary.deltaValue === null || orderSummary.deltaPct === null
+      ? 'n/a'
+      : `${orderSummary.deltaValue >= 0 ? '+' : ''}${formatInteger(orderSummary.deltaValue)} (${orderSummary.deltaPct >= 0 ? '+' : ''}${formatNumber(orderSummary.deltaPct)}%)`
 
   return (
     <div className="daily-close-tooltip" data-daily-close-tooltip="true" style={{ left: horizontalStyle, top: verticalStyle }}>
@@ -343,23 +389,78 @@ function DailyClosingTooltip({
           <span>Value</span>
           <strong>{formatMillionsWhenLarge(record.traded_value, { digits: 1, fallback: 'integer' })}</strong>
         </div>
-        <div className="daily-close-tooltip__metric">
-          <span>To High</span>
-          <strong>
-            {upsideAbsolute === null || upsideRelative === null
-              ? 'n/a'
-              : `${formatInteger(upsideAbsolute)} (${upsideRelative >= 0 ? '+' : ''}${formatNumber(upsideRelative * 100)}%)`}
+      </div>
+      <div className="daily-close-tooltip__inventory">
+        <div className="daily-close-tooltip__inventoryMetric">
+          <span>Qty</span>
+          <strong>{hasOrderInventory ? formatInteger(orderSummary?.availableQuantity) : '0'}</strong>
+        </div>
+        <div className="daily-close-tooltip__inventoryMetric">
+          <span>Average</span>
+          <strong>{!orderSummary || orderSummary.weightedAveragePrice === null ? 'n/a' : formatInteger(orderSummary.weightedAveragePrice)}</strong>
+        </div>
+        <div className="daily-close-tooltip__inventoryMetric daily-close-tooltip__inventoryMetric--detail">
+          <span>
+            Buys
+            {orderSummary && orderSummary.buyOrders.length > 0 ? (
+              <span className="daily-close-tooltip__detailTrigger" aria-hidden="true">
+                i
+              </span>
+            ) : null}
+          </span>
+          <strong>{hasOrderInventory ? formatInteger(orderSummary?.buyCount) : '0'}</strong>
+          {orderSummary && orderSummary.buyOrders.length > 0 ? <OrderDetailsPopover orders={orderSummary.buyOrders} /> : null}
+        </div>
+        <div className="daily-close-tooltip__inventoryMetric daily-close-tooltip__inventoryMetric--detail">
+          <span>
+            Sells
+            {orderSummary && orderSummary.sellOrders.length > 0 ? (
+              <span className="daily-close-tooltip__detailTrigger" aria-hidden="true">
+                i
+              </span>
+            ) : null}
+          </span>
+          <strong>{hasOrderInventory ? formatInteger(orderSummary?.sellCount) : '0'}</strong>
+          {orderSummary && orderSummary.sellOrders.length > 0 ? <OrderDetailsPopover orders={orderSummary.sellOrders} /> : null}
+        </div>
+        <div className="daily-close-tooltip__inventoryMetric">
+          <span>P&amp;L</span>
+          <strong className={`daily-close-tooltip__inventoryValue daily-close-tooltip__inventoryValue--${realizedProfitTone}`}>
+            {hasOrderInventory ? formatInteger(orderSummary?.realizedProfit) : '0'}
           </strong>
         </div>
-        <div className="daily-close-tooltip__metric">
-          <span>To Low</span>
-          <strong>
-            {downsideAbsolute === null || downsideRelative === null
-              ? 'n/a'
-              : `${formatInteger(downsideAbsolute)} (${downsideRelative >= 0 ? '+' : ''}${formatNumber(downsideRelative * 100)}%)`}
-          </strong>
+        <div className="daily-close-tooltip__inventoryMetric">
+          <span>Vs Last</span>
+          <strong className="daily-close-tooltip__inventorySubtle">{vsLastLabel}</strong>
         </div>
       </div>
+    </div>
+  )
+}
+
+function OrderDetailsPopover({
+  orders,
+}: {
+  orders: Array<{
+    timestamp: string | null
+    quantity: number
+    price: number
+    side: 'buy' | 'sell'
+  }>
+}) {
+  return (
+    <div className="daily-close-tooltip__detailPopover">
+      <ul className="daily-close-tooltip__detailList">
+        {orders.map((order, index) => (
+          <li key={`${order.timestamp ?? 'order'}-${order.side}-${order.quantity}-${order.price}-${index}`}>
+            <span className="daily-close-tooltip__detailTime">{formatTimeOnly(order.timestamp)}</span>
+            <span>{order.side === 'buy' ? 'buy' : 'sell'}</span>
+            <strong>{formatInteger(order.quantity)}</strong>
+            <span>@</span>
+            <strong>{formatInteger(order.price)}</strong>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -431,6 +532,7 @@ function buildDailyClosingChart(records: DailyClosingRecord[]) {
 
     return {
       key: buildDailyClosingKey(record),
+      tradingDate: record.trading_date,
       x,
       y,
       label: record.trading_date,
@@ -629,4 +731,22 @@ function formatValueInMillions(value: number) {
 
 function buildDailyClosingKey(record: DailyClosingRecord) {
   return record.source_snapshot_checksum ?? `${record.symbol}-${record.trading_date}`
+}
+
+function formatTimeOnly(value: string | null | undefined) {
+  if (!value) {
+    return '--:--'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '--:--'
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Bogota',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
 }

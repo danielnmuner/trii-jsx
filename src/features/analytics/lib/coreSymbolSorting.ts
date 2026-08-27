@@ -1,4 +1,5 @@
 import type { AnalyticsSymbolFeed, ZscoreOpportunityRecord } from '../api/schemas'
+import type { OrderPositionSummary } from './orderPosition'
 import {
   DEFAULT_INVESTMENT_CAP,
   DEFAULT_PROFIT_TARGET,
@@ -26,15 +27,17 @@ export type CoreSortIntent = (typeof coreSortPresets)[number]['key']
 type RankCoreSymbolsArgs = {
   baseOrder: string[]
   latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
+  orderPositionsBySymbol?: Record<string, OrderPositionSummary | undefined>
   intent: CoreSortIntent
 }
 
 export function rankCoreSymbols({
   baseOrder,
   latestBySymbol,
+  orderPositionsBySymbol,
   intent,
 }: RankCoreSymbolsArgs) {
-  if (intent === 'manual' || intent === 'held') {
+  if (intent === 'manual') {
     return baseOrder
   }
 
@@ -63,6 +66,7 @@ export function rankCoreSymbols({
       left,
       right,
       latestBySymbol,
+      orderPositionsBySymbol,
       intent,
       profitScenariosBySymbol,
       profitRiskBySymbol,
@@ -80,6 +84,7 @@ function compareSymbolsByIntent({
   left,
   right,
   latestBySymbol,
+  orderPositionsBySymbol,
   intent,
   profitScenariosBySymbol,
   profitRiskBySymbol,
@@ -87,12 +92,20 @@ function compareSymbolsByIntent({
   left: string
   right: string
   latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
+  orderPositionsBySymbol?: Record<string, OrderPositionSummary | undefined>
   intent: Exclude<CoreSortIntent, 'manual'>
   profitScenariosBySymbol?: Record<string, ReturnType<typeof resolveDefaultProfitScenario> | undefined>
   profitRiskBySymbol?: Record<string, number | undefined>
 }) {
   const leftSnapshot = latestBySymbol[left]?.current_snapshot
   const rightSnapshot = latestBySymbol[right]?.current_snapshot
+
+  if (intent === 'held') {
+    return compareNumbersDesc(
+      resolveHeldInvestmentValue(orderPositionsBySymbol?.[left]),
+      resolveHeldInvestmentValue(orderPositionsBySymbol?.[right]),
+    )
+  }
 
   if (intent === 'up') {
     return compareNumbersDesc(
@@ -178,6 +191,27 @@ export function resolveAvailableQuantity(
   )
 
   return typeof zscoreSummary?.available_quantity === 'number' ? zscoreSummary.available_quantity : 0
+}
+
+export function resolveHeldInvestmentValue(positionSummary: OrderPositionSummary | undefined) {
+  if (!positionSummary) {
+    return 0
+  }
+
+  const quantity =
+    typeof positionSummary.availableQuantity === 'number' && Number.isFinite(positionSummary.availableQuantity)
+      ? positionSummary.availableQuantity
+      : 0
+  const average =
+    typeof positionSummary.weightedAveragePrice === 'number' && Number.isFinite(positionSummary.weightedAveragePrice)
+      ? positionSummary.weightedAveragePrice
+      : 0
+
+  if (quantity <= 0 || average <= 0) {
+    return 0
+  }
+
+  return quantity * average
 }
 
 function compareNumbersDesc(left: number | null | undefined, right: number | null | undefined) {

@@ -3603,7 +3603,7 @@ button {
 .daily-close-tooltip {
   position: absolute;
   z-index: 8;
-  width: min(236px, calc(100% - 22px));
+  width: min(244px, calc(100% - 22px));
   border-radius: var(--radius-md);
   background:
     linear-gradient(180deg, rgba(6, 10, 14, 0.988), rgba(10, 14, 18, 0.972)),
@@ -3612,7 +3612,7 @@ button {
   padding: 8px 10px 9px;
   display: grid;
   gap: 4px;
-  pointer-events: none;
+  pointer-events: auto;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.065);
 }
@@ -3717,6 +3717,128 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.daily-close-tooltip__inventory {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 10px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.105);
+}
+
+.daily-close-tooltip__inventoryMetric {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  position: relative;
+}
+
+.daily-close-tooltip__inventoryMetric:nth-child(3n + 2),
+.daily-close-tooltip__inventoryMetric:nth-child(3n + 3) {
+  padding-left: 8px;
+  border-left: 1px dashed rgba(255, 255, 255, 0.09);
+}
+
+.daily-close-tooltip__inventoryMetric span {
+  color: rgba(244, 246, 248, 0.46);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.42rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.daily-close-tooltip__inventoryMetric strong {
+  color: rgba(244, 246, 248, 0.9);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.daily-close-tooltip__inventoryValue--positive {
+  color: var(--positive);
+}
+
+.daily-close-tooltip__inventoryValue--negative {
+  color: var(--negative);
+}
+
+.daily-close-tooltip__inventorySubtle {
+  font-size: 0.54rem;
+  color: rgba(214, 221, 233, 0.82);
+}
+
+.daily-close-tooltip__inventoryMetric--detail span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.daily-close-tooltip__detailTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 196, 255, 0.24);
+  background: rgba(120, 196, 255, 0.08);
+  color: rgba(166, 221, 255, 0.94);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.42rem;
+  font-style: normal;
+  line-height: 1;
+}
+
+.daily-close-tooltip__detailPopover {
+  position: absolute;
+  left: -6px;
+  top: calc(100% + 8px);
+  min-width: 178px;
+  max-width: 214px;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  z-index: 12;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 13, 18, 0.985);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+  padding: 8px 10px;
+}
+
+.daily-close-tooltip__inventoryMetric--detail:hover .daily-close-tooltip__detailPopover,
+.daily-close-tooltip__inventoryMetric--detail:focus-within .daily-close-tooltip__detailPopover {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.daily-close-tooltip__detailList {
+  margin: 0;
+  padding-left: 14px;
+  display: grid;
+  gap: 5px;
+}
+
+.daily-close-tooltip__detailList li {
+  color: rgba(228, 234, 242, 0.88);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-size: 0.58rem;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.daily-close-tooltip__detailTime {
+  color: rgba(207, 214, 226, 0.72);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.52rem;
 }
 
 .zscore-card__footerItem--right {

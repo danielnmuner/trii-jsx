@@ -15,11 +15,12 @@ import { OverviewPanel } from '../components/OverviewPanel'
 import { ZscoreOpportunityPanel } from '../components/ZscoreOpportunityPanel'
 import { useFlowSignalMonitor } from '../hooks/useFlowSignalMonitor'
 import { useAnalyticsCatalog, useAnalyticsSnapshots, useDailyClosingSnapshots, useZscoreOpportunityWindows } from '../hooks/useAnalytics'
+import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTimeline'
 import { useOrderPositions } from '../hooks/useOrderPositions'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
-import { collectFlowSignalSymbols, rankCoreSymbols, resolveAvailableQuantity, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { collectFlowSignalSymbols, rankCoreSymbols, resolveAvailableQuantity, resolveHeldInvestmentValue, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
 const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
@@ -83,14 +84,23 @@ export function AnalyticsPage() {
       ),
     [zscoreQuery.results],
   )
+  const eligibleOverviewResults = useMemo(
+    () => snapshotsQuery.results.filter((result) => resolveOverviewSampleCount(result) >= MIN_OVERVIEW_SAMPLE_COUNT),
+    [snapshotsQuery.results],
+  )
+  const orderPositionsQuery = useOrderPositions(
+    eligibleOverviewResults.map((result) => result.current_snapshot),
+    activeTab === 'Overview',
+  )
   const rankedSymbolOrder = useMemo(
     () =>
       rankCoreSymbols({
         baseOrder: symbolOrder,
         latestBySymbol: Object.fromEntries(snapshotsQuery.results.map((result) => [result.symbol, result])),
+        orderPositionsBySymbol: orderPositionsQuery.bySymbol,
         intent: coreSortIntent,
       }),
-    [coreSortIntent, latestZscoreBySymbol, snapshotsQuery.results, symbolOrder],
+    [coreSortIntent, orderPositionsQuery.bySymbol, snapshotsQuery.results, symbolOrder],
   )
   const effectiveSelectedSymbols =
     selectedSymbols.length > 0
@@ -151,11 +161,6 @@ export function AnalyticsPage() {
       ...boundaries,
     }
   }, [snapshotsQuery.results])
-
-  const eligibleOverviewResults = useMemo(
-    () => snapshotsQuery.results.filter((result) => resolveOverviewSampleCount(result) >= MIN_OVERVIEW_SAMPLE_COUNT),
-    [snapshotsQuery.results],
-  )
   const orderedSnapshotResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<AnalyticsSymbolFeed[]>((ordered, symbol) => {
@@ -200,10 +205,7 @@ export function AnalyticsPage() {
       }, []),
     [dailyClosingQuery.results, effectiveSelectedSymbols],
   )
-  const orderPositionsQuery = useOrderPositions(
-    orderedEligibleOverviewResults.map((result) => result.current_snapshot),
-    activeTab === 'Overview',
-  )
+  const dailyOrderTimelineQuery = useDailyOrderPositionTimeline(orderedDailyClosingResults, activeTab === 'Historic')
 
   const eligibleOverviewSymbolSet = useMemo(
     () => new Set(orderedEligibleOverviewResults.map((result) => result.symbol)),
@@ -216,17 +218,23 @@ export function AnalyticsPage() {
   )
   const coreHeldSymbols = useMemo(
     () =>
-      coreVisibleSymbols.filter((symbol) => {
-        const snapshot = snapshotsQuery.results.find((result) => result.symbol === symbol)?.current_snapshot
-        const zscoreRecord = latestZscoreBySymbol[symbol]
-        return resolveAvailableQuantity(snapshot, zscoreRecord) > 0
-      }),
-    [coreVisibleSymbols, latestZscoreBySymbol, snapshotsQuery.results],
-  )
+      [...coreVisibleSymbols]
+        .filter((symbol) => {
+          const positionSummary = orderPositionsQuery.bySymbol[symbol]
+          if (positionSummary) {
+            return positionSummary.availableQuantity > 0
+          }
 
-  const coreSelectedSymbols = useMemo(
-    () => effectiveSelectedSymbols.filter((symbol) => eligibleOverviewSymbolSet.has(symbol)),
-    [effectiveSelectedSymbols, eligibleOverviewSymbolSet],
+          const snapshot = snapshotsQuery.results.find((result) => result.symbol === symbol)?.current_snapshot
+          const zscoreRecord = latestZscoreBySymbol[symbol]
+          return resolveAvailableQuantity(snapshot, zscoreRecord) > 0
+        })
+        .sort(
+          (left, right) =>
+            resolveHeldInvestmentValue(orderPositionsQuery.bySymbol[right]) -
+            resolveHeldInvestmentValue(orderPositionsQuery.bySymbol[left]),
+        ),
+    [coreVisibleSymbols, latestZscoreBySymbol, orderPositionsQuery.bySymbol, snapshotsQuery.results],
   )
 
   const coreLatestBySymbol = useMemo(
@@ -280,13 +288,6 @@ export function AnalyticsPage() {
     })
   }
 
-  const handleCoreSelectedSymbolsChange = (nextVisibleSelectedSymbols: string[]) => {
-    setSelectedSymbols((current) => {
-      const hiddenSelections = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
-      return [...hiddenSelections, ...nextVisibleSelectedSymbols]
-    })
-  }
-
   const handleCoreSymbolOrderChange = (nextVisibleOrder: string[]) => {
     setSymbolOrder((current) => {
       const hiddenSymbols = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
@@ -299,12 +300,7 @@ export function AnalyticsPage() {
       return
     }
 
-    freezeCurrentCoreOrder()
-    setCoreSortIntent('held')
-    setSelectedSymbols((current) => {
-      const hiddenSelections = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
-      return [...hiddenSelections, ...coreHeldSymbols]
-    })
+    handleCoreSortIntentChange('held')
   }
 
   const handleCoreSortIntentChange = (nextIntent: CoreSortIntent) => {
@@ -468,10 +464,8 @@ export function AnalyticsPage() {
         orderedSymbols={coreVisibleSymbols}
         heldSymbols={coreHeldSymbols}
         latestBySymbol={coreLatestBySymbol}
-        selectedSymbols={coreSelectedSymbols}
         symbols={coreVisibleSymbols}
         sortIntent={coreSortIntent}
-        onSelectedSymbolsChange={handleCoreSelectedSymbolsChange}
         onSymbolOrderChange={handleCoreSymbolOrderChange}
         onSortIntentChange={handleCoreSortIntentChange}
         onOwnedSymbolsSelect={handleOwnedSymbolsSelect}
@@ -550,7 +544,7 @@ export function AnalyticsPage() {
           ) : dailyClosingQuery.results.length === 0 || dailyClosingQuery.results.every((window) => window.records.length === 0) ? (
             <StatusState title="No Data" description="No daily closing snapshots are available for the selected symbols." />
           ) : (
-            <DailyClosingPanel windows={orderedDailyClosingResults} />
+            <DailyClosingPanel windows={orderedDailyClosingResults} orderTimelineBySymbol={dailyOrderTimelineQuery.bySymbol} />
           )
         ) : null}
 

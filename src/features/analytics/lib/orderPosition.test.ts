@@ -148,9 +148,13 @@ describe('summarizeDailyOrderPositionTimeline', () => {
     expect(timeline['2026-08-01']).toMatchObject({
       availableQuantity: 10,
       weightedAveragePrice: 100,
+      displayAveragePrice: 100,
+      vsLastReferencePrice: 100,
       buyCount: 1,
       sellCount: 0,
       realizedProfit: 0,
+      totalCommission: 0,
+      totalNetProfit: 0,
     })
     expect(timeline['2026-08-01']?.buyOrders).toHaveLength(1)
     expect(timeline['2026-08-01']?.sellOrders).toHaveLength(0)
@@ -158,17 +162,25 @@ describe('summarizeDailyOrderPositionTimeline', () => {
     expect(timeline['2026-08-02']).toMatchObject({
       availableQuantity: 5,
       weightedAveragePrice: 100,
+      displayAveragePrice: 100,
+      vsLastReferencePrice: 110,
       buyCount: 0,
       sellCount: 1,
       realizedProfit: 50,
+      totalCommission: 0,
+      totalNetProfit: 50,
     })
     expect(timeline['2026-08-02']?.sellOrders).toHaveLength(1)
 
     expect(timeline['2026-08-03']).toMatchObject({
       availableQuantity: 25,
+      displayAveragePrice: 92,
+      vsLastReferencePrice: 92,
       buyCount: 1,
       sellCount: 0,
       realizedProfit: 0,
+      totalCommission: 0,
+      totalNetProfit: 0,
     })
     expect(timeline['2026-08-03']?.weightedAveragePrice).toBeCloseTo(92, 8)
 
@@ -177,6 +189,9 @@ describe('summarizeDailyOrderPositionTimeline', () => {
       buyCount: 0,
       sellCount: 1,
       realizedProfit: 100,
+      vsLastReferencePrice: 125,
+      totalCommission: 0,
+      totalNetProfit: 100,
     })
     expect(timeline['2026-08-04']?.sellOrders?.[0]).toMatchObject({
       quantity: 4,
@@ -184,6 +199,7 @@ describe('summarizeDailyOrderPositionTimeline', () => {
       side: 'sell',
     })
     expect(timeline['2026-08-04']?.weightedAveragePrice).toBeCloseTo((100 + 20 * 90) / 21, 8)
-    expect(timeline['2026-08-04']?.deltaValue).toBeCloseTo(95 - (100 + 20 * 90) / 21, 8)
+    expect(timeline['2026-08-04']?.displayAveragePrice).toBeCloseTo((100 + 20 * 90) / 21, 8)
+    expect(timeline['2026-08-04']?.deltaValue).toBeCloseTo(95 - 125, 8)
   })
 })

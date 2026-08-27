@@ -344,6 +344,8 @@ function DailyClosingTooltip({
     ? `clamp(8px, calc(${((point.y / 280) * 100).toFixed(3)}% + 12px), calc(100% - ${tooltipHeight + 8}px))`
     : `clamp(8px, calc(${((point.y / 280) * 100).toFixed(3)}% - ${tooltipHeight + 12}px), calc(100% - ${tooltipHeight + 8}px))`
   const realizedProfitTone = (orderSummary?.realizedProfit ?? 0) < 0 ? 'negative' : 'positive'
+  const totalNetProfitTone = (orderSummary?.totalNetProfit ?? 0) < 0 ? 'negative' : 'positive'
+  const vsLastTone = (orderSummary?.deltaValue ?? 0) < 0 ? 'negative' : 'positive'
   const hasOrderInventory = Boolean(orderSummary)
   const vsLastLabel =
     !orderSummary || orderSummary.deltaValue === null || orderSummary.deltaPct === null
@@ -397,7 +399,7 @@ function DailyClosingTooltip({
         </div>
         <div className="daily-close-tooltip__inventoryMetric">
           <span>Average</span>
-          <strong>{!orderSummary || orderSummary.weightedAveragePrice === null ? 'n/a' : formatInteger(orderSummary.weightedAveragePrice)}</strong>
+          <strong>{!orderSummary || orderSummary.displayAveragePrice === null ? 'n/a' : formatInteger(orderSummary.displayAveragePrice)}</strong>
         </div>
         <div className="daily-close-tooltip__inventoryMetric daily-close-tooltip__inventoryMetric--detail">
           <span>
@@ -430,8 +432,18 @@ function DailyClosingTooltip({
           </strong>
         </div>
         <div className="daily-close-tooltip__inventoryMetric">
+          <span>Comm</span>
+          <strong>{hasOrderInventory ? formatInteger(orderSummary?.totalCommission) : '0'}</strong>
+        </div>
+        <div className="daily-close-tooltip__inventoryMetric">
+          <span>Total</span>
+          <strong className={`daily-close-tooltip__inventoryValue daily-close-tooltip__inventoryValue--${totalNetProfitTone}`}>
+            {hasOrderInventory ? formatInteger(orderSummary?.totalNetProfit) : '0'}
+          </strong>
+        </div>
+        <div className="daily-close-tooltip__inventoryMetric">
           <span>Vs Last</span>
-          <strong className="daily-close-tooltip__inventorySubtle">{vsLastLabel}</strong>
+          <strong className={`daily-close-tooltip__inventorySubtle daily-close-tooltip__inventorySubtle--${vsLastTone}`}>{vsLastLabel}</strong>
         </div>
       </div>
     </div>

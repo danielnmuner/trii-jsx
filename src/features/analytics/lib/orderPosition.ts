@@ -14,11 +14,15 @@ export type DailyOrderPositionSummary = {
   tradingDate: string
   availableQuantity: number
   weightedAveragePrice: number | null
+  displayAveragePrice: number | null
+  vsLastReferencePrice: number | null
   deltaValue: number | null
   deltaPct: number | null
   buyCount: number
   sellCount: number
   realizedProfit: number
+  totalCommission: number
+  totalNetProfit: number
   buyOrders: DailyOrderSummaryItem[]
   sellOrders: DailyOrderSummaryItem[]
 }
@@ -107,6 +111,13 @@ export function summarizeDailyOrderPositionTimeline(
     let buyCount = 0
     let sellCount = 0
     let realizedProfit = 0
+    let totalCommission = 0
+    let buyQuantity = 0
+    let buyCost = 0
+    let sellQuantity = 0
+    let sellValue = 0
+    let soldCost = 0
+    let soldConsumedQuantity = 0
     const buyOrders: DailyOrderSummaryItem[] = []
     const sellOrders: DailyOrderSummaryItem[] = []
 
@@ -119,6 +130,7 @@ export function summarizeDailyOrderPositionTimeline(
 
       const quantity = normalizePositiveNumber(record.filled_quantity)
       const price = normalizePositiveNumber(record.price_per_share)
+      const commission = normalizeNonNegativeNumber(record.commission_amount)
       const side = (record.order_side ?? '').trim().toLowerCase()
 
       if (quantity && price && side) {
@@ -129,6 +141,9 @@ export function summarizeDailyOrderPositionTimeline(
           })
           if (recordTradingDate === checkpoint.tradingDate) {
             buyCount += 1
+            buyQuantity += quantity
+            buyCost += quantity * price
+            totalCommission += commission
             buyOrders.push({
               timestamp: resolveOrderIsoTimestamp(record),
               quantity,
@@ -141,6 +156,11 @@ export function summarizeDailyOrderPositionTimeline(
           if (recordTradingDate === checkpoint.tradingDate) {
             sellCount += 1
             realizedProfit += saleResult.realizedProfit
+            totalCommission += commission
+            sellQuantity += quantity
+            sellValue += quantity * price
+            soldCost += saleResult.consumedCost
+            soldConsumedQuantity += saleResult.consumedQuantity
             sellOrders.push({
               timestamp: resolveOrderIsoTimestamp(record),
               quantity,
@@ -157,27 +177,37 @@ export function summarizeDailyOrderPositionTimeline(
     const availableQuantity = lots.reduce((sum, lot) => sum + lot.quantity, 0)
     const totalCost = lots.reduce((sum, lot) => sum + lot.quantity * lot.unitPrice, 0)
     const weightedAveragePrice = availableQuantity > 0 ? totalCost / availableQuantity : null
+    const averageBuyPrice = buyQuantity > 0 ? buyCost / buyQuantity : null
+    const averageSellPrice = sellQuantity > 0 ? sellValue / sellQuantity : null
+    const averageSoldCostPrice = soldConsumedQuantity > 0 ? soldCost / soldConsumedQuantity : null
+    const displayAveragePrice = weightedAveragePrice ?? averageBuyPrice ?? averageSoldCostPrice
+    const vsLastReferencePrice = sellQuantity > 0 ? averageSellPrice : displayAveragePrice
     const normalizedLastPrice =
       typeof checkpoint.lastPrice === 'number' && Number.isFinite(checkpoint.lastPrice) ? checkpoint.lastPrice : null
     const deltaValue =
-      weightedAveragePrice !== null && normalizedLastPrice !== null
-        ? normalizedLastPrice - weightedAveragePrice
+      vsLastReferencePrice !== null && normalizedLastPrice !== null
+        ? normalizedLastPrice - vsLastReferencePrice
         : null
     const deltaPct =
-      weightedAveragePrice !== null && weightedAveragePrice > 0 && deltaValue !== null
-        ? (deltaValue / weightedAveragePrice) * 100
+      vsLastReferencePrice !== null && vsLastReferencePrice > 0 && deltaValue !== null
+        ? (deltaValue / vsLastReferencePrice) * 100
         : null
+    const totalNetProfit = sellCount > 0 ? realizedProfit - totalCommission : 0
 
     summaries[checkpoint.tradingDate] = {
       symbol: normalizedSymbol,
       tradingDate: checkpoint.tradingDate,
       availableQuantity,
       weightedAveragePrice,
+      displayAveragePrice,
+      vsLastReferencePrice,
       deltaValue,
       deltaPct,
       buyCount,
       sellCount,
       realizedProfit,
+      totalCommission,
+      totalNetProfit,
       buyOrders,
       sellOrders,
     }
@@ -212,11 +242,15 @@ function consumeLotsFifo(lots: PositionLot[], sellQuantity: number) {
 function consumeLotsFifoWithProfit(lots: PositionLot[], sellQuantity: number, sellPrice: number) {
   let remaining = sellQuantity
   let realizedProfit = 0
+  let consumedCost = 0
+  let consumedQuantityTotal = 0
 
   while (remaining > 0 && lots.length > 0) {
     const head = lots[0]
     const consumedQuantity = Math.min(head.quantity, remaining)
     realizedProfit += (sellPrice - head.unitPrice) * consumedQuantity
+    consumedCost += head.unitPrice * consumedQuantity
+    consumedQuantityTotal += consumedQuantity
 
     if (head.quantity <= remaining) {
       remaining -= head.quantity
@@ -230,6 +264,8 @@ function consumeLotsFifoWithProfit(lots: PositionLot[], sellQuantity: number, se
 
   return {
     realizedProfit,
+    consumedCost,
+    consumedQuantity: consumedQuantityTotal,
   }
 }
 
@@ -272,4 +308,8 @@ function resolveOrderIsoTimestamp(record: StockOrdersLookupRecord) {
 
 function normalizePositiveNumber(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function normalizeNonNegativeNumber(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
 }

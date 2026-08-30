@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  readAnalyticsFlowAudioEnabled,
   readAnalyticsSymbolOrder,
-  writeAnalyticsFlowAudioEnabled,
   writeAnalyticsSymbolOrder,
 } from '../../../shared/config/storage'
 import { StatusState } from '../../../shared/ui/StatusState'
@@ -13,36 +11,23 @@ import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
 import { HistoricStatsPanel } from '../components/HistoricStatsPanel'
 import { OverviewPanel } from '../components/OverviewPanel'
 import { ZscoreOpportunityPanel } from '../components/ZscoreOpportunityPanel'
-import { useFlowSignalMonitor } from '../hooks/useFlowSignalMonitor'
-import { useAnalyticsCatalog, useAnalyticsSnapshots, useDailyClosingSnapshots, useZscoreOpportunityWindows } from '../hooks/useAnalytics'
+import {
+  useAnalyticsCatalog,
+  useAnalyticsSnapshots,
+  useDailyClosingSnapshots,
+  useSessionVectors,
+  useZscoreOpportunityWindows,
+} from '../hooks/useAnalytics'
 import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTimeline'
 import { useOrderPositions } from '../hooks/useOrderPositions'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
-import { collectFlowSignalSymbols, rankCoreSymbols, resolveAvailableQuantity, resolveHeldInvestmentValue, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { rankCoreSymbols, resolveAvailableQuantity, resolveOwnedInvestmentValue, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
 const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
-
-function toIsoBoundaries(values: string[]) {
-  const epochValues = values
-    .map((value) => new Date(value).getTime())
-    .filter((value) => !Number.isNaN(value))
-
-  if (epochValues.length === 0) {
-    return {
-      from: undefined,
-      to: undefined,
-    }
-  }
-
-  return {
-    from: new Date(Math.min(...epochValues)).toISOString(),
-    to: new Date(Math.max(...epochValues)).toISOString(),
-  }
-}
 
 function getErrorMessage(error: unknown, fallback = 'Unknown error') {
   return error instanceof Error ? error.message : fallback
@@ -58,7 +43,6 @@ export function AnalyticsPage() {
   const symbols = catalogQuery.data?.result.symbols ?? []
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
-  const [flowAudioEnabled, setFlowAudioEnabled] = useState<boolean>(() => readAnalyticsFlowAudioEnabled())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
   const querySelectedSymbols =
     selectedSymbols.length > 0
@@ -97,10 +81,9 @@ export function AnalyticsPage() {
       rankCoreSymbols({
         baseOrder: symbolOrder,
         latestBySymbol: Object.fromEntries(snapshotsQuery.results.map((result) => [result.symbol, result])),
-        orderPositionsBySymbol: orderPositionsQuery.bySymbol,
         intent: coreSortIntent,
       }),
-    [coreSortIntent, orderPositionsQuery.bySymbol, snapshotsQuery.results, symbolOrder],
+    [coreSortIntent, snapshotsQuery.results, symbolOrder],
   )
   const effectiveSelectedSymbols =
     selectedSymbols.length > 0
@@ -145,22 +128,6 @@ export function AnalyticsPage() {
     writeAnalyticsSymbolOrder(symbolOrder)
   }, [symbolOrder])
 
-  useEffect(() => {
-    writeAnalyticsFlowAudioEnabled(flowAudioEnabled)
-  }, [flowAudioEnabled])
-
-  const summary = useMemo(() => {
-    const timestamps = snapshotsQuery.results
-      .flatMap((result) => [result.current_snapshot.captured_at, result.previous_snapshot?.captured_at])
-      .filter(Boolean) as string[]
-    const boundaries = toIsoBoundaries(timestamps)
-
-    return {
-      symbolCount: snapshotsQuery.results.length,
-      records: timestamps.length,
-      ...boundaries,
-    }
-  }, [snapshotsQuery.results])
   const orderedSnapshotResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<AnalyticsSymbolFeed[]>((ordered, symbol) => {
@@ -183,6 +150,7 @@ export function AnalyticsPage() {
       }, []),
     [effectiveSelectedSymbols, eligibleOverviewResults],
   )
+  const sessionVectorsQuery = useSessionVectors(orderedEligibleOverviewResults, activeTab === 'Overview')
   const orderedZscoreResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<typeof zscoreQuery.results>((ordered, symbol) => {
@@ -216,7 +184,7 @@ export function AnalyticsPage() {
     () => rankedSymbolOrder.filter((symbol) => eligibleOverviewSymbolSet.has(symbol)),
     [rankedSymbolOrder, eligibleOverviewSymbolSet],
   )
-  const coreHeldSymbols = useMemo(
+  const coreOwnedSymbols = useMemo(
     () =>
       [...coreVisibleSymbols]
         .filter((symbol) => {
@@ -231,8 +199,8 @@ export function AnalyticsPage() {
         })
         .sort(
           (left, right) =>
-            resolveHeldInvestmentValue(orderPositionsQuery.bySymbol[right]) -
-            resolveHeldInvestmentValue(orderPositionsQuery.bySymbol[left]),
+            resolveOwnedInvestmentValue(orderPositionsQuery.bySymbol[right]) -
+            resolveOwnedInvestmentValue(orderPositionsQuery.bySymbol[left]),
         ),
     [coreVisibleSymbols, latestZscoreBySymbol, orderPositionsQuery.bySymbol, snapshotsQuery.results],
   )
@@ -265,16 +233,6 @@ export function AnalyticsPage() {
       stale: counts.stale,
     }
   }, [coreLatestBySymbol, coreVisibleSymbols])
-  const flowSignalSymbols = useMemo(
-    () =>
-      collectFlowSignalSymbols({
-        symbols: coreVisibleSymbols,
-        latestBySymbol: coreLatestBySymbol,
-      }),
-    [coreLatestBySymbol, coreVisibleSymbols],
-  )
-  const flowSignalMonitor = useFlowSignalMonitor(flowSignalSymbols, flowAudioEnabled)
-
   const freezeCurrentCoreOrder = () => {
     setSymbolOrder((currentOrder) => {
       if (
@@ -296,11 +254,21 @@ export function AnalyticsPage() {
   }
 
   const handleOwnedSymbolsSelect = () => {
-    if (coreHeldSymbols.length === 0) {
+    if (coreOwnedSymbols.length === 0) {
       return
     }
 
-    handleCoreSortIntentChange('held')
+    setSymbolOrder((current) => {
+      const visibleSymbols = coreVisibleSymbols
+      const ownedSet = new Set(coreOwnedSymbols)
+      const orderedVisibleSymbols = [
+        ...coreOwnedSymbols,
+        ...visibleSymbols.filter((symbol) => !ownedSet.has(symbol)),
+      ]
+      const hiddenSymbols = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
+      return [...orderedVisibleSymbols, ...hiddenSymbols]
+    })
+    setCoreSortIntent('manual')
   }
 
   const handleCoreSortIntentChange = (nextIntent: CoreSortIntent) => {
@@ -308,7 +276,7 @@ export function AnalyticsPage() {
       return
     }
 
-    if (nextIntent === 'manual' || nextIntent === 'held') {
+    if (nextIntent === 'manual') {
       freezeCurrentCoreOrder()
     }
 
@@ -317,11 +285,13 @@ export function AnalyticsPage() {
 
   const hasCatalogData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
+  const hasSessionVectorData = sessionVectorsQuery.results.length > 0
   const hasZscoreData = zscoreQuery.results.some((window) => window.records.length > 0)
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
 
   const catalogDegraded = catalogQuery.isError && hasCatalogData
   const snapshotDegraded = snapshotsQuery.isError && hasSnapshotData
+  const sessionVectorDegraded = sessionVectorsQuery.isError && hasSessionVectorData
   const zscoreDegraded = zscoreQuery.isError && hasZscoreData
   const dailyClosingDegraded = dailyClosingQuery.isError && hasDailyClosingData
   const activeDataStatus = useMemo(() => {
@@ -340,21 +310,21 @@ export function AnalyticsPage() {
     }
 
     if (activeTab === 'Overview' || activeTab === 'Benchmark Stats') {
-      if (snapshotsQuery.isLoading && !hasSnapshotData) {
+      if ((snapshotsQuery.isLoading && !hasSnapshotData) || (activeTab === 'Overview' && sessionVectorsQuery.isLoading && !hasSessionVectorData)) {
         return {
           label: 'Loading',
           tone: 'loading' as const,
         }
       }
 
-      if (snapshotsQuery.isFetching) {
+      if (snapshotsQuery.isFetching || (activeTab === 'Overview' && sessionVectorsQuery.isFetching)) {
         return {
           label: 'Syncing',
           tone: 'fetching' as const,
         }
       }
 
-      if (snapshotDegraded) {
+      if (snapshotDegraded || (activeTab === 'Overview' && sessionVectorDegraded)) {
         return {
           label: 'Degraded',
           tone: 'degraded' as const,
@@ -436,10 +406,14 @@ export function AnalyticsPage() {
     hasCatalogData,
     hasDailyClosingData,
     hasSnapshotData,
+    hasSessionVectorData,
     hasZscoreData,
     snapshotDegraded,
     snapshotsQuery.isFetching,
     snapshotsQuery.isLoading,
+    sessionVectorDegraded,
+    sessionVectorsQuery.isFetching,
+    sessionVectorsQuery.isLoading,
     zscoreDegraded,
     zscoreQuery.isFetching,
     zscoreQuery.isLoading,
@@ -449,20 +423,16 @@ export function AnalyticsPage() {
     <main className="page-shell analytics-workspace">
       <MarketTape />
 
-      <AnalyticsHero
-        dataStatusLabel={activeDataStatus.label}
-        dataStatusTone={activeDataStatus.tone}
-        flowAudioEnabled={flowAudioEnabled}
-        from={summary.from}
-        onFlowAudioToggle={() => setFlowAudioEnabled((current) => !current)}
-        stockSummary={coreFreshnessSummary}
-        to={summary.to}
-      />
-
       <AnalyticsFilters
-        flowSignalCount={flowSignalMonitor.activeCount}
+        headerSummary={
+          <AnalyticsHero
+            dataStatusLabel={activeDataStatus.label}
+            dataStatusTone={activeDataStatus.tone}
+            stockSummary={coreFreshnessSummary}
+          />
+        }
         orderedSymbols={coreVisibleSymbols}
-        heldSymbols={coreHeldSymbols}
+        ownedSymbols={coreOwnedSymbols}
         latestBySymbol={coreLatestBySymbol}
         symbols={coreVisibleSymbols}
         sortIntent={coreSortIntent}
@@ -494,7 +464,11 @@ export function AnalyticsPage() {
           ) : eligibleOverviewResults.length === 0 ? (
             <StatusState title="No Data" description="No symbols meet the minimum sample support required for overview." />
           ) : (
-            <OverviewPanel snapshots={orderedEligibleOverviewResults} orderPositionsBySymbol={orderPositionsQuery.bySymbol} />
+            <OverviewPanel
+              snapshots={orderedEligibleOverviewResults}
+              orderPositionsBySymbol={orderPositionsQuery.bySymbol}
+              sessionVectorsBySymbol={sessionVectorsQuery.bySymbol}
+            />
           )
         ) : null}
 

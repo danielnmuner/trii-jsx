@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -22,7 +22,7 @@ import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { formatInteger, formatPercentFromWhole } from '../lib/formatters'
-import { coreSortPresets, hasPositiveFlowSignal, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { coreSortPresets, type CoreSortIntent } from '../lib/coreSymbolSorting'
 
 type StockHeaderSummary = {
   total: number
@@ -31,29 +31,20 @@ type StockHeaderSummary = {
 }
 
 type AnalyticsHeroProps = {
-  from?: string
   dataStatusLabel: string
   dataStatusTone: 'loading' | 'fetching' | 'live' | 'degraded'
-  flowAudioEnabled: boolean
-  onFlowAudioToggle: () => void
   stockSummary: StockHeaderSummary
-  to?: string
 }
 
 export function AnalyticsHero({
   dataStatusLabel,
   dataStatusTone,
-  flowAudioEnabled,
-  from: _from,
-  onFlowAudioToggle,
   stockSummary,
-  to: _to,
 }: AnalyticsHeroProps) {
   return (
-    <section className="analytics-topbar">
+    <div className="analytics-topbar">
       <div className="analytics-topbar__title">
         <div className="analytics-topbar__headline">
-          <span className="analytics-topbar__eyebrow">Realtime desk</span>
           <span className={clsx('analytics-topbar__status', `is-${dataStatusTone}`)}>
             {dataStatusLabel}
           </span>
@@ -66,28 +57,14 @@ export function AnalyticsHero({
           </div>
         </div>
       </div>
-      <div className="analytics-topbar__meta">
-        <button
-          type="button"
-          className={clsx(
-            'analytics-topbar__toggle',
-            flowAudioEnabled ? 'is-live' : 'is-muted',
-          )}
-          onClick={onFlowAudioToggle}
-          aria-pressed={flowAudioEnabled}
-          aria-label={flowAudioEnabled ? 'Disable flow sound' : 'Enable flow sound'}
-        >
-          {flowAudioEnabled ? 'Sound On' : 'Sound Off'}
-        </button>
-      </div>
-    </section>
+    </div>
   )
 }
 
 type AnalyticsFiltersProps = {
-  flowSignalCount: number
+  headerSummary: ReactNode
   orderedSymbols: string[]
-  heldSymbols: string[]
+  ownedSymbols: string[]
   latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
   symbols: string[]
   sortIntent: CoreSortIntent
@@ -104,13 +81,12 @@ type SymbolChipViewModel = {
   tone: SymbolChipTone
   price: string | null
   delta: string | null
-  hasFlowSignal: boolean
 }
 
 export function AnalyticsFilters({
-  flowSignalCount,
+  headerSummary,
   orderedSymbols,
-  heldSymbols,
+  ownedSymbols,
   latestBySymbol,
   symbols,
   sortIntent,
@@ -162,7 +138,6 @@ export function AnalyticsFilters({
                 snapshot?.daily_change_amount === null || snapshot?.daily_change_amount === undefined
                   ? null
                   : `${formatInteger(snapshot.daily_change_amount)} (${formatPercentFromWhole(snapshot.daily_change_percent)})`,
-              hasFlowSignal: hasPositiveFlowSignal(feed),
             },
           ]
         }),
@@ -200,8 +175,25 @@ export function AnalyticsFilters({
 
   return (
     <section className="analytics-filterbar" aria-label="Primary filters">
-      <div className="analytics-filterbar__group analytics-filterbar__group--core">
-        <span className="analytics-filterbar__label">Core</span>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <SortableContext items={displaySymbols} strategy={rectSortingStrategy}>
+          <div className="symbol-chip-row">
+            {displaySymbols.map((symbol) => (
+              <SortableSymbolChip
+                key={`core-${symbol}`}
+                dragEnabled={dragEnabled}
+                model={chipModels[symbol]}
+              />
+            ))}
+          </div>
+        </SortableContext>
+
+        <DragOverlay>
+          {dragEnabled && activeChip ? <SymbolChipCard model={activeChip} isDraggingOverlay /> : null}
+        </DragOverlay>
+      </DndContext>
+
+      <div className="analytics-filterbar__footer">
         <div className="analytics-sortbar" role="tablist" aria-label="Core ranking">
           {coreSortPresets.map((preset) => {
             const isActive = preset.key === sortIntent
@@ -213,7 +205,7 @@ export function AnalyticsFilters({
                 onClick={() => onSortIntentChange(preset.key)}
                 aria-pressed={isActive}
               >
-                {preset.key === 'flow_z' ? `${preset.label} (${flowSignalCount})` : preset.label}
+                {preset.label}
               </button>
             )
           })}
@@ -221,28 +213,12 @@ export function AnalyticsFilters({
             type="button"
             className="analytics-sortbar__button analytics-sortbar__button--action"
             onClick={onOwnedSymbolsSelect}
-            disabled={heldSymbols.length === 0}
+            disabled={ownedSymbols.length === 0}
           >
             Owned
           </button>
         </div>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <SortableContext items={displaySymbols} strategy={rectSortingStrategy}>
-            <div className="symbol-chip-row">
-              {displaySymbols.map((symbol) => (
-                <SortableSymbolChip
-                  key={`core-${symbol}`}
-                  dragEnabled={dragEnabled}
-                  model={chipModels[symbol]}
-                />
-              ))}
-            </div>
-          </SortableContext>
-
-          <DragOverlay>
-            {dragEnabled && activeChip ? <SymbolChipCard model={activeChip} isDraggingOverlay /> : null}
-          </DragOverlay>
-        </DndContext>
+        {headerSummary}
       </div>
     </section>
   )
@@ -307,7 +283,6 @@ function SymbolChipCard({
         'symbol-chip',
         !dragEnabled && 'symbol-chip--static',
         model.isSelected && 'symbol-chip--selected',
-        model.hasFlowSignal && 'symbol-chip--flow-signal',
         isDragging && 'symbol-chip--dragging',
         isDraggingOverlay && 'symbol-chip--overlay',
       )}

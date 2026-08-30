@@ -76,7 +76,7 @@ function resolveSnapshotTradingDate(snapshot: AnalyticsSymbolFeed['current_snaps
   return getBogotaDateKey(snapshot.captured_at)
 }
 
-function resolveOverviewTradingDate(reference = new Date()) {
+export function resolveOverviewTradingDate(reference = new Date()) {
   const bogotaDate = getBogotaDateKey(reference)
   if (!bogotaDate) {
     return null

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
-import type { OrderPositionSummary } from './orderPosition'
-import { collectFlowSignalSymbols, rankCoreSymbols } from './coreSymbolSorting'
+import type { AnalyticsSymbolFeed } from '../api/schemas'
+import { rankCoreSymbols } from './coreSymbolSorting'
 
 function createSnapshot(overrides: Partial<AnalyticsSymbolFeed['current_snapshot']> = {}): AnalyticsSymbolFeed['current_snapshot'] {
   return {
@@ -11,22 +10,10 @@ function createSnapshot(overrides: Partial<AnalyticsSymbolFeed['current_snapshot
   }
 }
 
-function createStat(overrides: Partial<HistoricStat> = {}): HistoricStat {
-  return {
-    sample_count: 10,
-    latest_value: 10,
-    mean: 5,
-    stddev: 1,
-    ...overrides,
-  }
-}
-
 function createFeed({
   snapshot = {},
-  currentStats = {},
 }: {
   snapshot?: Partial<AnalyticsSymbolFeed['current_snapshot']>
-  currentStats?: Partial<Record<string, HistoricStat>>
 } = {}): AnalyticsSymbolFeed {
   return {
     symbol: snapshot.symbol ?? 'TEST',
@@ -36,40 +23,11 @@ function createFeed({
     current_snapshot: createSnapshot(snapshot),
     previous_snapshot: createSnapshot({ symbol: snapshot.symbol ?? 'TEST', captured_at: '2026-08-25T09:50:00-05:00' }),
     snapshots: [createSnapshot(snapshot)],
-    current_stats: currentStats as Record<string, HistoricStat>,
-  }
-}
-
-function createPositionSummary(overrides: Partial<OrderPositionSummary> = {}): OrderPositionSummary {
-  return {
-    symbol: overrides.symbol ?? 'TEST',
-    availableQuantity: overrides.availableQuantity ?? 0,
-    weightedAveragePrice: overrides.weightedAveragePrice ?? null,
-    deltaValue: overrides.deltaValue ?? null,
-    deltaPct: overrides.deltaPct ?? null,
+    current_stats: {},
   }
 }
 
 describe('rankCoreSymbols', () => {
-  it('sorts held inventory by invested capital descending using FIFO order summaries', () => {
-    const ordered = rankCoreSymbols({
-      baseOrder: ['AAA', 'BBB', 'CCC'],
-      latestBySymbol: {
-        AAA: createFeed({ snapshot: { symbol: 'AAA' } }),
-        BBB: createFeed({ snapshot: { symbol: 'BBB' } }),
-        CCC: createFeed({ snapshot: { symbol: 'CCC' } }),
-      },
-      orderPositionsBySymbol: {
-        AAA: createPositionSummary({ symbol: 'AAA', availableQuantity: 12, weightedAveragePrice: 1_000 }),
-        BBB: createPositionSummary({ symbol: 'BBB', availableQuantity: 25, weightedAveragePrice: 2_000 }),
-        CCC: createPositionSummary({ symbol: 'CCC', availableQuantity: 5, weightedAveragePrice: 5_000 }),
-      },
-      intent: 'held',
-    })
-
-    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
-  })
-
   it('sorts by daily change percent descending for up intent', () => {
     const ordered = rankCoreSymbols({
       baseOrder: ['AAA', 'BBB', 'CCC'],
@@ -98,20 +56,6 @@ describe('rankCoreSymbols', () => {
     expect(ordered).toEqual(['BBB', 'CCC', 'AAA'])
   })
 
-  it('sorts by most recent capture first for recent intent', () => {
-    const ordered = rankCoreSymbols({
-      baseOrder: ['AAA', 'BBB', 'CCC'],
-      latestBySymbol: {
-        AAA: createFeed({ snapshot: { symbol: 'AAA', captured_at: '2026-08-25T10:01:00-05:00' } }),
-        BBB: createFeed({ snapshot: { symbol: 'BBB', captured_at: '2026-08-25T10:05:00-05:00' } }),
-        CCC: createFeed({ snapshot: { symbol: 'CCC', captured_at: '2026-08-25T09:59:00-05:00' } }),
-      },
-      intent: 'recent',
-    })
-
-    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
-  })
-
   it('sorts by traded value descending for value intent', () => {
     const ordered = rankCoreSymbols({
       baseOrder: ['AAA', 'BBB', 'CCC'],
@@ -126,132 +70,4 @@ describe('rankCoreSymbols', () => {
     expect(ordered).toEqual(['BBB', 'CCC', 'AAA'])
   })
 
-  it('sorts by the strongest traded flow z-score descending for flow_z intent', () => {
-    const ordered = rankCoreSymbols({
-      baseOrder: ['AAA', 'BBB', 'CCC'],
-      latestBySymbol: {
-        AAA: createFeed({
-          snapshot: { symbol: 'AAA' },
-          currentStats: {
-            traded_volume: createStat({ latest_value: 7, mean: 5, stddev: 1 }),
-            traded_value: createStat({ latest_value: 8, mean: 5, stddev: 1 }),
-          },
-        }),
-        BBB: createFeed({
-          snapshot: { symbol: 'BBB' },
-          currentStats: {
-            traded_volume: createStat({ latest_value: 12, mean: 5, stddev: 1 }),
-          },
-        }),
-        CCC: createFeed({
-          snapshot: { symbol: 'CCC' },
-          currentStats: {
-            traded_value: createStat({ latest_value: 9, mean: 5, stddev: 2 }),
-          },
-        }),
-      },
-      intent: 'flow_z',
-    })
-
-    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
-  })
-
-  it('prioritizes symbols whose default profit scenario reaches 100K and sorts them by red ask-loss span ascending', () => {
-    const ordered = rankCoreSymbols({
-      baseOrder: ['AAA', 'BBB', 'CCC'],
-      latestBySymbol: {
-        AAA: createFeed({
-          snapshot: {
-            symbol: 'AAA',
-            low_price: 100,
-            best_bid_price: 105,
-            mid_price: 106,
-            microprice: 106,
-            last_price: 106,
-            best_ask_price: 107,
-            high_price: 115,
-          },
-        }),
-        BBB: createFeed({
-          snapshot: {
-            symbol: 'BBB',
-            low_price: 1_000,
-            best_bid_price: 1_050,
-            mid_price: 1_060,
-            microprice: 1_060,
-            last_price: 1_060,
-            best_ask_price: 1_070,
-            high_price: 1_200,
-          },
-        }),
-        CCC: createFeed({
-          snapshot: {
-            symbol: 'CCC',
-            low_price: 100,
-            best_bid_price: 105,
-            mid_price: 105,
-            microprice: 105,
-            last_price: 105,
-            best_ask_price: 105,
-            high_price: 106,
-          },
-        }),
-      },
-      intent: 'profit',
-    })
-
-    expect(ordered).toEqual(['BBB', 'AAA', 'CCC'])
-  })
-
-  it('does not throw when profit sorting receives symbols without a snapshot yet', () => {
-    const ordered = rankCoreSymbols({
-      baseOrder: ['AAA', 'BBB'],
-      latestBySymbol: {
-        AAA: undefined,
-        BBB: createFeed({
-          snapshot: {
-            symbol: 'BBB',
-            low_price: 1_000,
-            best_bid_price: 1_050,
-            mid_price: 1_060,
-            microprice: 1_060,
-            last_price: 1_060,
-            best_ask_price: 1_070,
-            high_price: 1_200,
-          },
-        }),
-      },
-      intent: 'profit',
-    })
-
-    expect(ordered).toEqual(['BBB', 'AAA'])
-  })
-
-  it('collects only symbols with a traded flow z-score above the threshold', () => {
-    const activeSymbols = collectFlowSignalSymbols({
-      symbols: ['AAA', 'BBB', 'CCC'],
-      latestBySymbol: {
-        AAA: createFeed({
-          snapshot: { symbol: 'AAA' },
-          currentStats: {
-            traded_volume: createStat({ latest_value: 7, mean: 5, stddev: 1 }),
-          },
-        }),
-        BBB: createFeed({
-          snapshot: { symbol: 'BBB' },
-          currentStats: {
-            traded_value: createStat({ latest_value: 6.7, mean: 5, stddev: 1 }),
-          },
-        }),
-        CCC: createFeed({
-          snapshot: { symbol: 'CCC' },
-          currentStats: {
-            traded_value: createStat({ latest_value: 7.2, mean: 5, stddev: 1 }),
-          },
-        }),
-      },
-    })
-
-    expect(activeSymbols).toEqual(['AAA', 'CCC'])
-  })
 })

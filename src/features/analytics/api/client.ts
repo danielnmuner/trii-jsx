@@ -5,6 +5,9 @@ import {
   analyticsHistoricStatsResponseSchema,
   analyticsSnapshotResponseSchema,
   dailyClosingResponseSchema,
+  sessionVectorHeadResponseSchema,
+  sessionVectorResponseSchema,
+  sessionVectorSegmentsResponseSchema,
   zscoreOpportunityResponseSchema,
 } from './schemas'
 
@@ -73,4 +76,32 @@ export async function fetchDailyClosingSnapshots(symbol: string, limit = ANALYTI
   })
   const payload = await getJson(`/analytics/daily-closing?${query.toString()}`)
   return dailyClosingResponseSchema.parse(payload)
+}
+
+export async function fetchSessionVector(symbol: string, tradingDate: string) {
+  const query = new URLSearchParams({
+    symbol,
+    trading_date: tradingDate,
+  })
+  const payload = await getJson(`/analytics/session-vector?${query.toString()}`)
+  return sessionVectorResponseSchema.parse(payload)
+}
+
+export async function fetchSessionVectorHead(symbol: string, tradingDate: string) {
+  const query = new URLSearchParams({
+    symbol,
+    trading_date: tradingDate,
+  })
+  const payload = await getJson(`/analytics/session-vector/head?${query.toString()}`)
+  return sessionVectorHeadResponseSchema.parse(payload)
+}
+
+export async function fetchSessionVectorSegments(symbol: string, tradingDate: string, fromSegment: number) {
+  const query = new URLSearchParams({
+    symbol,
+    trading_date: tradingDate,
+    from_segment: String(fromSegment),
+  })
+  const payload = await getJson(`/analytics/session-vector/segments?${query.toString()}`)
+  return sessionVectorSegmentsResponseSchema.parse(payload)
 }

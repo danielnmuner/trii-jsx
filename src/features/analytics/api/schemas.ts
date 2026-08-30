@@ -253,6 +253,76 @@ export const dailyClosingResponseSchema = z.object({
   }),
 })
 
+export const sessionVectorManifestSchema = z
+  .object({
+    symbol: z.string(),
+    trading_date: z.string(),
+    timezone: z.string().nullable().optional(),
+    record_type: z.string().nullable().optional(),
+    session_start: z.string().nullable().optional(),
+    session_end: z.string().nullable().optional(),
+    latest_captured_at: z.string().nullable().optional(),
+    latest_sample_index: z.number().optional(),
+    segment_count: z.number().optional(),
+    samples_per_segment: z.number().optional(),
+    sampling_seconds: z.number().optional(),
+    expires_at: z.number().nullable().optional(),
+  })
+  .passthrough()
+
+export const sessionVectorSegmentSchema = z
+  .object({
+    symbol: z.string(),
+    trading_date: z.string(),
+    timezone: z.string().nullable().optional(),
+    record_type: z.string().nullable().optional(),
+    segment_index: z.number(),
+    from_sample_index: z.number(),
+    to_sample_index: z.number(),
+    from_captured_at: z.string().nullable().optional(),
+    to_captured_at: z.string().nullable().optional(),
+    expires_at: z.number().nullable().optional(),
+    last_price_series: z.array(z.number().nullable()).optional().default([]),
+    microprice_series: z.array(z.number().nullable()).optional().default([]),
+    mid_price_series: z.array(z.number().nullable()).optional().default([]),
+    vwap_series: z.array(z.number().nullable()).optional().default([]),
+  })
+  .passthrough()
+
+export const sessionVectorResponseSchema = z.object({
+  status: z.literal('ok'),
+  result: z.object({
+    symbol: z.string(),
+    trading_date: z.string(),
+    sampling_seconds: z.number(),
+    samples_per_segment: z.number(),
+    segment_count: z.number(),
+    manifest: sessionVectorManifestSchema.nullable().optional(),
+    segments: z.array(sessionVectorSegmentSchema).optional().default([]),
+  }),
+})
+
+export const sessionVectorHeadResponseSchema = z.object({
+  status: z.literal('ok'),
+  result: z.object({
+    symbol: z.string(),
+    trading_date: z.string(),
+    found: z.boolean(),
+    manifest: sessionVectorManifestSchema.nullable().optional(),
+  }),
+})
+
+export const sessionVectorSegmentsResponseSchema = z.object({
+  status: z.literal('ok'),
+  result: z.object({
+    symbol: z.string(),
+    trading_date: z.string(),
+    from_segment: z.number(),
+    segment_count: z.number(),
+    segments: z.array(sessionVectorSegmentSchema).optional().default([]),
+  }),
+})
+
 export type AnalyticsCatalogResponse = z.infer<typeof analyticsCatalogResponseSchema>
 export type AnalyticsSnapshotResponse = z.infer<typeof analyticsSnapshotResponseSchema>
 export type AnalyticsSnapshotResult = AnalyticsSnapshotResponse['result']
@@ -265,6 +335,11 @@ export type ZscoreMetricSample = z.infer<typeof zscoreMetricSampleSchema>
 export type ZscoreOpportunityRecord = z.infer<typeof zscoreOpportunityRecordSchema>
 export type ZscoreOpportunityResponse = z.infer<typeof zscoreOpportunityResponseSchema>
 export type DailyClosingRecord = z.infer<typeof dailyClosingRecordSchema>
+export type SessionVectorManifest = z.infer<typeof sessionVectorManifestSchema>
+export type SessionVectorSegment = z.infer<typeof sessionVectorSegmentSchema>
+export type SessionVectorResponse = z.infer<typeof sessionVectorResponseSchema>
+export type SessionVectorHeadResponse = z.infer<typeof sessionVectorHeadResponseSchema>
+export type SessionVectorSegmentsResponse = z.infer<typeof sessionVectorSegmentsResponseSchema>
 export type AnalyticsSymbolFeed = AnalyticsSnapshotResult & {
   current_stats: Record<string, HistoricStat>
   seasonality_profile?: SeasonalityProfile

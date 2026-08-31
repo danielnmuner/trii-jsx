@@ -335,8 +335,8 @@ function DailyClosingTooltip({
     typeof record.daily_change_amount === 'number' && record.daily_change_amount < 0 ? 'negative' : 'positive'
   const alignRight = point.x > 436
   const alignBelow = point.y < 112
-  const tooltipWidth = 244
-  const tooltipHeight = 228
+  const tooltipWidth = 272
+  const tooltipHeight = 204
   const horizontalStyle = alignRight
     ? `clamp(8px, calc(${((point.x / 640) * 100).toFixed(3)}% - ${tooltipWidth + 12}px), calc(100% - ${tooltipWidth + 8}px))`
     : `clamp(8px, ${((point.x / 640) * 100).toFixed(3)}%, calc(100% - ${tooltipWidth + 8}px))`

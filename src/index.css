@@ -4056,15 +4056,15 @@ button {
 .daily-close-tooltip {
   position: absolute;
   z-index: 8;
-  width: min(244px, calc(100% - 22px));
+  width: min(272px, calc(100% - 20px));
   border-radius: var(--radius-md);
   background:
     linear-gradient(180deg, rgba(6, 10, 14, 0.988), rgba(10, 14, 18, 0.972)),
     rgba(255, 255, 255, 0.01);
   backdrop-filter: blur(14px);
-  padding: 8px 10px 9px;
+  padding: 8px 10px 8px;
   display: grid;
-  gap: 4px;
+  gap: 3px;
   pointer-events: auto;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.065);
@@ -4126,15 +4126,15 @@ button {
 .daily-close-tooltip__metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 10px;
-  padding-top: 2px;
+  gap: 3px 10px;
+  padding-top: 1px;
 }
 
 .daily-close-tooltip__metric {
   min-width: 0;
   display: grid;
   gap: 1px;
-  padding-top: 5px;
+  padding-top: 4px;
 }
 
 .daily-close-tooltip__metric:nth-child(-n + 2) {
@@ -4174,9 +4174,9 @@ button {
 
 .daily-close-tooltip__inventory {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 10px;
-  padding-top: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px 8px;
+  padding-top: 4px;
   border-top: 1px dashed rgba(255, 255, 255, 0.105);
 }
 
@@ -4185,11 +4185,18 @@ button {
   display: grid;
   gap: 1px;
   position: relative;
+  padding-top: 2px;
 }
 
-.daily-close-tooltip__inventoryMetric:nth-child(3n + 2),
-.daily-close-tooltip__inventoryMetric:nth-child(3n + 3) {
-  padding-left: 8px;
+.daily-close-tooltip__inventoryMetric:nth-child(n + 5) {
+  border-top: 1px dashed rgba(255, 255, 255, 0.09);
+  padding-top: 5px;
+}
+
+.daily-close-tooltip__inventoryMetric:nth-child(4n + 2),
+.daily-close-tooltip__inventoryMetric:nth-child(4n + 3),
+.daily-close-tooltip__inventoryMetric:nth-child(4n + 4) {
+  padding-left: 6px;
   border-left: 1px dashed rgba(255, 255, 255, 0.09);
 }
 
@@ -4204,7 +4211,7 @@ button {
 .daily-close-tooltip__inventoryMetric strong {
   color: rgba(244, 246, 248, 0.9);
   font-family: "Manrope", "Segoe UI", sans-serif;
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -4220,7 +4227,8 @@ button {
 }
 
 .daily-close-tooltip__inventoryMetric strong.daily-close-tooltip__inventorySubtle {
-  font-size: 0.48rem;
+  font-size: 0.43rem;
+  line-height: 1.1;
   color: rgba(214, 221, 233, 0.82);
 }
 

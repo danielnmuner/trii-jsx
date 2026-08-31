@@ -28,18 +28,34 @@ function createFeed({
 }
 
 describe('rankCoreSymbols', () => {
-  it('sorts by daily change percent descending for up intent', () => {
+  it('sorts by last price premium vs vwap descending for up intent', () => {
     const ordered = rankCoreSymbols({
-      baseOrder: ['AAA', 'BBB', 'CCC'],
+      baseOrder: ['AAA', 'BBB', 'CCC', 'DDD'],
       latestBySymbol: {
-        AAA: createFeed({ snapshot: { symbol: 'AAA', daily_change_percent: 120 } }),
-        BBB: createFeed({ snapshot: { symbol: 'BBB', daily_change_percent: -50 } }),
-        CCC: createFeed({ snapshot: { symbol: 'CCC', daily_change_percent: 600 } }),
+        AAA: createFeed({ snapshot: { symbol: 'AAA', last_price: 105, traded_value: 1_000, traded_volume: 10 } }),
+        BBB: createFeed({ snapshot: { symbol: 'BBB', last_price: 97, traded_value: 1_000, traded_volume: 10 } }),
+        CCC: createFeed({ snapshot: { symbol: 'CCC', last_price: 112, traded_value: 1_000, traded_volume: 10 } }),
+        DDD: createFeed({ snapshot: { symbol: 'DDD', last_price: 100, traded_value: 1_000, traded_volume: 10 } }),
       },
       intent: 'up',
     })
 
-    expect(ordered).toEqual(['CCC', 'AAA', 'BBB'])
+    expect(ordered).toEqual(['CCC', 'AAA', 'BBB', 'DDD'])
+  })
+
+  it('sorts by last price discount vs vwap ascending for down intent', () => {
+    const ordered = rankCoreSymbols({
+      baseOrder: ['AAA', 'BBB', 'CCC', 'DDD'],
+      latestBySymbol: {
+        AAA: createFeed({ snapshot: { symbol: 'AAA', last_price: 105, traded_value: 1_000, traded_volume: 10 } }),
+        BBB: createFeed({ snapshot: { symbol: 'BBB', last_price: 97, traded_value: 1_000, traded_volume: 10 } }),
+        CCC: createFeed({ snapshot: { symbol: 'CCC', last_price: 92, traded_value: 1_000, traded_volume: 10 } }),
+        DDD: createFeed({ snapshot: { symbol: 'DDD', last_price: 100, traded_value: 1_000, traded_volume: 10 } }),
+      },
+      intent: 'down',
+    })
+
+    expect(ordered).toEqual(['CCC', 'BBB', 'AAA', 'DDD'])
   })
 
   it('sorts by spread ascending for tight intent', () => {

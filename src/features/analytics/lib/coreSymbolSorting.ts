@@ -1,5 +1,6 @@
 import type { AnalyticsSymbolFeed, ZscoreOpportunityRecord } from '../api/schemas'
 import type { OrderPositionSummary } from './orderPosition'
+import { computeCumulativeVwap } from './formatters'
 import { extractApprovedPositionSummary } from './positionSummary'
 
 export const coreSortPresets = [
@@ -61,17 +62,11 @@ function compareSymbolsByIntent({
   const rightSnapshot = latestBySymbol[right]?.current_snapshot
 
   if (intent === 'up') {
-    return compareNumbersDesc(
-      leftSnapshot?.daily_change_percent,
-      rightSnapshot?.daily_change_percent,
-    )
+    return compareLastVsVwapRelativeDesc(leftSnapshot, rightSnapshot)
   }
 
   if (intent === 'down') {
-    return compareNumbersAsc(
-      leftSnapshot?.daily_change_percent,
-      rightSnapshot?.daily_change_percent,
-    )
+    return compareLastVsVwapRelativeAsc(leftSnapshot, rightSnapshot)
   }
 
   if (intent === 'tight') {
@@ -122,6 +117,77 @@ export function resolveOwnedInvestmentValue(positionSummary: OrderPositionSummar
   }
 
   return quantity * average
+}
+
+function compareLastVsVwapRelativeDesc(
+  leftSnapshot: AnalyticsSymbolFeed['current_snapshot'] | undefined,
+  rightSnapshot: AnalyticsSymbolFeed['current_snapshot'] | undefined,
+) {
+  const leftRelative = resolveLastVsVwapRelative(leftSnapshot)
+  const rightRelative = resolveLastVsVwapRelative(rightSnapshot)
+  const leftMatches = typeof leftRelative === 'number' && leftRelative > 0
+  const rightMatches = typeof rightRelative === 'number' && rightRelative > 0
+
+  if (leftMatches && !rightMatches) {
+    return -1
+  }
+
+  if (!leftMatches && rightMatches) {
+    return 1
+  }
+
+  if (leftMatches && rightMatches) {
+    return compareNumbersDesc(leftRelative, rightRelative)
+  }
+
+  return 0
+}
+
+function compareLastVsVwapRelativeAsc(
+  leftSnapshot: AnalyticsSymbolFeed['current_snapshot'] | undefined,
+  rightSnapshot: AnalyticsSymbolFeed['current_snapshot'] | undefined,
+) {
+  const leftRelative = resolveLastVsVwapRelative(leftSnapshot)
+  const rightRelative = resolveLastVsVwapRelative(rightSnapshot)
+  const leftMatches = typeof leftRelative === 'number' && leftRelative < 0
+  const rightMatches = typeof rightRelative === 'number' && rightRelative < 0
+
+  if (leftMatches && !rightMatches) {
+    return -1
+  }
+
+  if (!leftMatches && rightMatches) {
+    return 1
+  }
+
+  if (leftMatches && rightMatches) {
+    return compareNumbersAsc(leftRelative, rightRelative)
+  }
+
+  return 0
+}
+
+function resolveLastVsVwapRelative(snapshot: AnalyticsSymbolFeed['current_snapshot'] | undefined) {
+  if (!snapshot) {
+    return null
+  }
+
+  const lastPrice = snapshot.last_price
+  const vwap = computeCumulativeVwap(snapshot)
+
+  if (
+    lastPrice === null ||
+    lastPrice === undefined ||
+    Number.isNaN(lastPrice) ||
+    vwap === null ||
+    vwap === undefined ||
+    Number.isNaN(vwap) ||
+    vwap === 0
+  ) {
+    return null
+  }
+
+  return ((lastPrice - vwap) / vwap) * 100
 }
 
 function compareNumbersDesc(left: number | null | undefined, right: number | null | undefined) {

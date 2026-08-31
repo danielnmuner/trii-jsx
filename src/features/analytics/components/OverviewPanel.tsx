@@ -65,6 +65,8 @@ type TapeItemData = {
       values: string
       detail?: string
       tone: TapeTone
+      highlightValues?: boolean
+      highlightDetail?: boolean
     }>
   }
   zScoreTone?: ZScoreTone
@@ -226,10 +228,16 @@ function TapeItem({ item }: { item: TapeItemData }) {
                 <span className={`overview-signal__expression overview-signal__expression--${row.tone}`} role="cell">
                   {row.expression}
                 </span>
-                <span className={`overview-signal__delta overview-signal__delta--${row.tone}`} role="cell">
+                <span
+                  className={`overview-signal__delta overview-signal__delta--${row.tone}${row.highlightDetail ? ' overview-signal__delta--highlight' : ''}`}
+                  role="cell"
+                >
                   {row.detail ?? ''}
                 </span>
-                <span className="overview-signal__values" role="cell">
+                <span
+                  className={`overview-signal__values${row.highlightValues ? ' overview-signal__values--highlight' : ''}`}
+                  role="cell"
+                >
                   {row.values}
                 </span>
               </div>
@@ -325,10 +333,11 @@ function buildTacticalReadItem(
   currentVwap: number | null,
   currentSpread: number | null,
 ): TapeItemData {
+  const vwapStddev = resolveStatStddev(currentStats.vwap)
   const microVsMid = buildComparisonContext(current.microprice, current.mid_price)
   const midVsVwap = buildComparisonContext(current.mid_price, currentVwap)
   const lastVsVwap = buildComparisonContext(current.last_price, currentVwap)
-  const spreadZScore = buildZScoreContext(currentStats.spread_bps).zScore
+  const spreadContext = buildZScoreContext(currentStats.spread_bps)
   const obiL1Context = buildZScoreContext(currentStats.obi_l1)
   const obiTop5Context = buildZScoreContext(currentStats.obi_top_5)
 
@@ -338,10 +347,31 @@ function buildTacticalReadItem(
     signalMatrix: {
       rows: [
         buildSignalRow('Micro', current.microprice, 'Mid', current.mid_price, microVsMid),
-        buildSignalRow('Mid', current.mid_price, 'VWAP', currentVwap, midVsVwap),
-        buildSignalRow('Last', current.last_price, 'VWAP', currentVwap, lastVsVwap),
-        buildSpreadRow(current.spread_bps, currentSpread, spreadZScore),
-        buildObiRow(current.obi_l1, current.obi_top_5, obiL1Context.zScore, obiTop5Context.zScore),
+        buildSignalRow(
+          'Mid',
+          current.mid_price,
+          'VWAP',
+          currentVwap,
+          midVsVwap,
+          buildRelativeToVwapZScore(current.mid_price, currentVwap, vwapStddev),
+        ),
+        buildSignalRow(
+          'Last',
+          current.last_price,
+          'VWAP',
+          currentVwap,
+          lastVsVwap,
+          buildRelativeToVwapZScore(current.last_price, currentVwap, vwapStddev),
+        ),
+        buildSpreadRow(current.spread_bps, currentSpread, spreadContext.zScore, spreadContext.highlight),
+        buildObiRow(
+          current.obi_l1,
+          current.obi_top_5,
+          obiL1Context.zScore,
+          obiTop5Context.zScore,
+          obiL1Context.highlight,
+          obiTop5Context.highlight,
+        ),
       ],
     },
   }
@@ -360,17 +390,18 @@ function buildZScoreContext(stat?: HistoricStat) {
     stat.stddev === undefined ||
     stat.stddev === 0
   ) {
-    return { zScore: undefined, tone: 'neutral' as ZScoreTone }
+    return { zScore: undefined, tone: 'neutral' as ZScoreTone, highlight: false }
   }
 
   const zScore = computeZScore(stat)
   if (zScore === null) {
-    return { zScore: undefined, tone: 'neutral' as ZScoreTone }
+    return { zScore: undefined, tone: 'neutral' as ZScoreTone, highlight: false }
   }
 
   return {
     zScore: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(1)}\u03c3`,
     tone: deriveZScoreTone(zScore),
+    highlight: shouldHighlightSignalZScore(zScore),
   }
 }
 
@@ -425,6 +456,21 @@ function computeZScore(stat: HistoricStat) {
   }
 
   return (stat.latest_value - stat.mean) / stat.stddev
+}
+
+function resolveStatStddev(stat?: HistoricStat) {
+  if (
+    !stat ||
+    stat.stddev === null ||
+    stat.stddev === undefined ||
+    Number.isNaN(stat.stddev) ||
+    stat.stddev === 0 ||
+    (stat.sample_count ?? 0) < 2
+  ) {
+    return null
+  }
+
+  return stat.stddev
 }
 
 function deriveSpread(bestAsk: number | null | undefined, bestBid: number | null | undefined) {
@@ -513,15 +559,41 @@ function buildSignalRow(
   rightLabel: string,
   rightValue: number | null | undefined,
   comparison: ComparisonContext | null,
+  zScore: { label: string; highlight: boolean } | undefined = undefined,
 ) {
   const relation = deriveComparisonRelation(comparison)
 
   return {
     label: `${leftLabel}-${rightLabel}`,
     expression: `${leftLabel.toUpperCase()} ${relation} ${rightLabel.toUpperCase()}`,
-    values: formatSignalValues(leftValue, rightValue, relation),
+    values: formatSignalValues(leftValue, rightValue, relation, zScore?.label),
     detail: comparison ? formatComparisonDelta(comparison) : 'n/a',
     tone: deriveDeltaTone(comparison?.delta),
+    highlightValues: zScore?.highlight,
+  }
+}
+
+function buildRelativeToVwapZScore(
+  leftValue: number | null | undefined,
+  vwapValue: number | null | undefined,
+  vwapStddev: number | null,
+) {
+  if (
+    leftValue === null ||
+    leftValue === undefined ||
+    Number.isNaN(leftValue) ||
+    vwapValue === null ||
+    vwapValue === undefined ||
+    Number.isNaN(vwapValue) ||
+    vwapStddev === null
+  ) {
+    return undefined
+  }
+
+  const zScore = (leftValue - vwapValue) / vwapStddev
+  return {
+    label: `${zScore >= 0 ? '+' : ''}${zScore.toFixed(1)}\u03c3`,
+    highlight: shouldHighlightSignalZScore(zScore),
   }
 }
 
@@ -545,23 +617,26 @@ function formatSignalValues(
   leftValue: number | null | undefined,
   rightValue: number | null | undefined,
   relation: string,
+  zScore?: string,
 ) {
   const left = formatMetricValue('last_price', leftValue)
   const right = formatMetricValue('last_price', rightValue)
 
-  return `${left} ${relation} ${right}`
+  return `${left} ${relation} ${right}${zScore ? ` ${zScore}` : ''}`
 }
 
 function buildSpreadRow(
   spreadBps: number | null | undefined,
   spread: number | null | undefined,
   spreadZScore: string | undefined,
+  highlightValues = false,
 ) {
   return {
     expression: 'SPREAD BPS',
     values: `${formatMetricValue('spread_bps', spreadBps)}${spreadZScore ? ` ${spreadZScore}` : ''}`,
     detail: `SPREAD ${formatMetricValue('spread', spread)}`,
     tone: deriveExecutionTone(spreadBps),
+    highlightValues,
   }
 }
 
@@ -570,13 +645,21 @@ function buildObiRow(
   obiTop5: number | null | undefined,
   obiL1ZScore: string | undefined,
   obiTop5ZScore: string | undefined,
+  highlightDetail = false,
+  highlightValues = false,
 ) {
   return {
     expression: 'OBI',
     detail: `L1 ${formatMetricValue('obi_l1', obiL1)}${obiL1ZScore ? ` ${obiL1ZScore}` : ''}`,
     values: `TOP 5 ${formatMetricValue('obi_top_5', obiTop5)}${obiTop5ZScore ? ` ${obiTop5ZScore}` : ''}`,
     tone: deriveObiRowTone(obiL1, obiTop5),
+    highlightDetail,
+    highlightValues,
   }
+}
+
+function shouldHighlightSignalZScore(zScore: number) {
+  return Math.abs(zScore) >= 2
 }
 
 function deriveObiRowTone(obiL1: number | null | undefined, obiTop5: number | null | undefined): TapeTone {

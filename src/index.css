@@ -2471,6 +2471,11 @@ button {
   text-overflow: ellipsis;
 }
 
+.overview-signal__values--highlight,
+.overview-signal__delta--highlight {
+  color: rgba(176, 82, 255, 0.98);
+}
+
 .overview-signal__expression--positive,
 .overview-signal__delta--positive {
   color: var(--positive);

@@ -4792,9 +4792,45 @@ button {
     white-space: normal;
   }
 
-  .overview-tape__row--microstructure,
+  .overview-tape__row--microstructure {
+    grid-template-columns: 1fr;
+  }
+
   .overview-tape__row--market {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-tape--microstructure .overview-tape__item {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .overview-tape--microstructure .overview-tape__item:last-child {
+    border-bottom: none;
+  }
+
+  .overview-signal__row {
+    grid-template-columns: minmax(0, 0.5fr) minmax(0, 0.54fr) minmax(0, 0.76fr);
+  }
+
+  .overview-signal__expression,
+  .overview-signal__values,
+  .overview-signal__delta {
+    white-space: nowrap;
+  }
+
+  .overview-signal__expression {
+    font-size: 0.5rem;
+  }
+
+  .overview-signal__delta,
+  .overview-signal__values {
+    font-size: 0.47rem;
+  }
+
+  .overview-tape__item--range-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
   }
 
   .historic-stats-band {
@@ -4866,7 +4902,10 @@ button {
     gap: 5px;
   }
 
-  .overview-tape__row--microstructure,
+  .overview-tape__row--microstructure {
+    grid-template-columns: 1fr;
+  }
+
   .overview-tape__row--market {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -4893,6 +4932,26 @@ button {
   .overview-session__legend {
     gap: 6px;
     font-size: 0.36rem;
+  }
+
+  .overview-signal__row {
+    grid-template-columns: minmax(0, 0.5fr) minmax(0, 0.56fr) minmax(0, 0.74fr);
+    padding: 3px 0;
+  }
+
+  .overview-signal__expression {
+    font-size: 0.47rem;
+    padding-right: 4px;
+  }
+
+  .overview-signal__delta {
+    font-size: 0.45rem;
+    padding-left: 4px;
+  }
+
+  .overview-signal__values {
+    font-size: 0.45rem;
+    padding: 0 4px;
   }
 
   .overview-card__title {
@@ -4933,6 +4992,11 @@ button {
 
   .overview-tape__zscore {
     font-size: 0.5rem;
+  }
+
+  .overview-tape__item--range-flow {
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 8px;
   }
 
   .overview-seasonality__chart,

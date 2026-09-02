@@ -212,8 +212,7 @@ function buildSessionVectorChart(
   referenceLow: number | null = null,
 ) {
   const points = flattenSessionVectorPoints(dataset)
-  const trimmedPoints = trimSessionTail(points, dataset)
-  const visiblePoints = selectWindowPoints(trimmedPoints, dataset, windowHours)
+  const visiblePoints = selectWindowPoints(points, dataset, windowHours)
   const numericValues = visiblePoints.flatMap((point) =>
     [point.lastPrice, point.midPrice, point.vwap].filter((value): value is number => typeof value === 'number' && !Number.isNaN(value)),
   )
@@ -458,37 +457,6 @@ function formatComparisonDelta(comparison: { delta: number; percent: number | nu
   }
 
   return `${absolute} (${comparison.percent >= 0 ? '+' : '-'}${formatNumber(Math.abs(comparison.percent))}%)`
-}
-
-function trimSessionTail(points: SessionVectorPoint[], dataset?: SessionVectorWindow | null) {
-  if (points.length === 0) {
-    return points
-  }
-
-  const sessionStart = resolveSessionBoundary(
-    dataset?.manifest?.session_start,
-    dataset?.tradingDate,
-    '08:30:00-05:00',
-  )
-  const sessionEnd = resolveSessionBoundary(
-    dataset?.manifest?.session_end,
-    dataset?.tradingDate,
-    '16:00:00-05:00',
-  )
-
-  if (!sessionStart || !sessionEnd) {
-    return points
-  }
-
-  const safeCutoffTime = sessionEnd.getTime() - 15 * 60 * 1000
-  const samplingSeconds = dataset?.samplingSeconds ?? 30
-
-  const trimmed = points.filter((point) => {
-    const pointTime = sessionStart.getTime() + point.index * samplingSeconds * 1000
-    return pointTime <= safeCutoffTime
-  })
-
-  return trimmed.length > 0 ? trimmed : points
 }
 
 function buildLinePath(

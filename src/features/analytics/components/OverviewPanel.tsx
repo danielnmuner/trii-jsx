@@ -622,7 +622,7 @@ function formatSignalValues(
   const left = formatMetricValue('last_price', leftValue)
   const right = formatMetricValue('last_price', rightValue)
 
-  return `${left} ${relation} ${right}${zScore ? ` ${zScore}` : ''}`
+  return `${left} ${relation} ${right}${zScore ? ` (${zScore})` : ''}`
 }
 
 function buildSpreadRow(
@@ -651,7 +651,7 @@ function buildObiRow(
   return {
     expression: 'OBI',
     detail: `L1 ${formatMetricValue('obi_l1', obiL1)}${obiL1ZScore ? ` ${obiL1ZScore}` : ''}`,
-    values: `TOP 5 ${formatMetricValue('obi_top_5', obiTop5)}${obiTop5ZScore ? ` ${obiTop5ZScore}` : ''}`,
+    values: `TOP 5 ${formatMetricValue('obi_top_5', obiTop5)}${obiTop5ZScore ? ` (${obiTop5ZScore})` : ''}`,
     tone: deriveObiRowTone(obiL1, obiTop5),
     highlightDetail,
     highlightValues,

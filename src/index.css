@@ -929,10 +929,10 @@ button {
 
 .overview-tape__row--microstructure {
   grid-template-columns:
-    minmax(0, 1.36fr)
-    minmax(0, 2.72fr)
-    minmax(0, 1.02fr);
-  min-height: 142px;
+    minmax(0, 1.52fr)
+    minmax(0, 2.48fr)
+    minmax(0, 1fr);
+  min-height: 146px;
 }
 
 .overview-tape__row--market {
@@ -986,7 +986,7 @@ button {
 
 .overview-tape__item--signal-stack {
   gap: 3px;
-  padding: 6px 7px;
+  padding: 7px 8px;
 }
 
 .overview-tape__item--microstructure-pair {
@@ -2433,11 +2433,11 @@ button {
 
 .overview-signal__row {
   display: grid;
-  grid-template-columns: minmax(0, 0.54fr) minmax(0, 0.52fr) minmax(0, 0.74fr);
+  grid-template-columns: minmax(0, 0.56fr) minmax(0, 0.5fr) minmax(0, 0.72fr);
   gap: 0;
   align-items: center;
   min-width: 0;
-  padding: 4px 0;
+  padding: 5px 0;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
@@ -2456,17 +2456,17 @@ button {
 
 .overview-signal__expression {
   color: rgba(236, 240, 244, 0.92);
-  font-size: 0.53rem;
+  font-size: 0.63rem;
   font-weight: 600;
-  padding-right: 5px;
+  padding-right: 6px;
 }
 
 .overview-signal__values {
   color: rgba(236, 240, 244, 0.88);
-  font-size: 0.5rem;
+  font-size: 0.6rem;
   font-weight: 500;
   text-align: right;
-  padding: 0 5px;
+  padding: 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -2493,10 +2493,10 @@ button {
 
 .overview-signal__delta {
   color: rgba(236, 240, 244, 0.88);
-  font-size: 0.5rem;
+  font-size: 0.6rem;
   font-weight: 500;
   text-align: center;
-  padding-left: 5px;
+  padding-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3944,7 +3944,7 @@ button {
   min-width: 0;
   border-radius: var(--radius-md);
   padding-top: 2px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .daily-close-chart {
@@ -4265,7 +4265,7 @@ button {
 .daily-close-tooltip__detailPopover {
   position: absolute;
   left: -6px;
-  top: calc(100% + 8px);
+  bottom: calc(100% + 8px);
   min-width: 178px;
   max-width: 214px;
   opacity: 0;
@@ -4280,6 +4280,11 @@ button {
   background: rgba(10, 13, 18, 0.985);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
   padding: 8px 10px;
+}
+
+.daily-close-tooltip__inventoryMetric:nth-child(4n) .daily-close-tooltip__detailPopover {
+  left: auto;
+  right: -6px;
 }
 
 .daily-close-tooltip__inventoryMetric--detail:hover .daily-close-tooltip__detailPopover,

@@ -30,6 +30,7 @@ export type DailyOrderPositionSummary = {
 type PositionLot = {
   quantity: number
   unitPrice: number
+  remainingCommission: number
 }
 
 export type DailyOrderSummaryItem = {
@@ -61,6 +62,7 @@ export function summarizeOrderPosition(symbol: string, records: StockOrdersLooku
       lots.push({
         quantity,
         unitPrice: price,
+        remainingCommission: normalizeNonNegativeNumber(record.commission_amount),
       })
       continue
     }
@@ -111,7 +113,9 @@ export function summarizeDailyOrderPositionTimeline(
     let buyCount = 0
     let sellCount = 0
     let realizedProfit = 0
-    let totalCommission = 0
+    let dayBuyCommission = 0
+    let realizedBuyCommission = 0
+    let sellCommission = 0
     let buyQuantity = 0
     let buyCost = 0
     let sellQuantity = 0
@@ -138,12 +142,13 @@ export function summarizeDailyOrderPositionTimeline(
           lots.push({
             quantity,
             unitPrice: price,
+            remainingCommission: commission,
           })
           if (recordTradingDate === checkpoint.tradingDate) {
             buyCount += 1
             buyQuantity += quantity
             buyCost += quantity * price
-            totalCommission += commission
+            dayBuyCommission += commission
             buyOrders.push({
               timestamp: resolveOrderIsoTimestamp(record),
               quantity,
@@ -156,7 +161,8 @@ export function summarizeDailyOrderPositionTimeline(
           if (recordTradingDate === checkpoint.tradingDate) {
             sellCount += 1
             realizedProfit += saleResult.realizedProfit
-            totalCommission += commission
+            realizedBuyCommission += saleResult.consumedCommission
+            sellCommission += commission
             sellQuantity += quantity
             sellValue += quantity * price
             soldCost += saleResult.consumedCost
@@ -192,6 +198,7 @@ export function summarizeDailyOrderPositionTimeline(
       vsLastReferencePrice !== null && vsLastReferencePrice > 0 && deltaValue !== null
         ? (deltaValue / vsLastReferencePrice) * 100
         : null
+    const totalCommission = sellCount > 0 ? realizedBuyCommission + sellCommission : dayBuyCommission
     const totalNetProfit = sellCount > 0 ? realizedProfit - totalCommission : 0
 
     summaries[checkpoint.tradingDate] = {
@@ -228,6 +235,12 @@ function consumeLotsFifo(lots: PositionLot[], sellQuantity: number) {
 
   while (remaining > 0 && lots.length > 0) {
     const head = lots[0]
+    const startingQuantity = head.quantity
+    const consumedQuantity = Math.min(head.quantity, remaining)
+    const consumedCommission =
+      startingQuantity > 0 ? (head.remainingCommission * consumedQuantity) / startingQuantity : 0
+    head.remainingCommission = Math.max(0, head.remainingCommission - consumedCommission)
+
     if (head.quantity <= remaining) {
       remaining -= head.quantity
       lots.shift()
@@ -244,13 +257,19 @@ function consumeLotsFifoWithProfit(lots: PositionLot[], sellQuantity: number, se
   let realizedProfit = 0
   let consumedCost = 0
   let consumedQuantityTotal = 0
+  let consumedCommissionTotal = 0
 
   while (remaining > 0 && lots.length > 0) {
     const head = lots[0]
+    const startingQuantity = head.quantity
     const consumedQuantity = Math.min(head.quantity, remaining)
     realizedProfit += (sellPrice - head.unitPrice) * consumedQuantity
     consumedCost += head.unitPrice * consumedQuantity
     consumedQuantityTotal += consumedQuantity
+    const consumedCommission =
+      startingQuantity > 0 ? (head.remainingCommission * consumedQuantity) / startingQuantity : 0
+    consumedCommissionTotal += consumedCommission
+    head.remainingCommission = Math.max(0, head.remainingCommission - consumedCommission)
 
     if (head.quantity <= remaining) {
       remaining -= head.quantity
@@ -266,6 +285,7 @@ function consumeLotsFifoWithProfit(lots: PositionLot[], sellQuantity: number, se
     realizedProfit,
     consumedCost,
     consumedQuantity: consumedQuantityTotal,
+    consumedCommission: consumedCommissionTotal,
   }
 }
 

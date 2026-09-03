@@ -12,6 +12,7 @@ describe('summarizeOrderPosition', () => {
           order_side: 'buy',
           filled_quantity: 10,
           price_per_share: 100,
+          commission_amount: 0,
           created_at: '2026-08-01T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -22,6 +23,7 @@ describe('summarizeOrderPosition', () => {
           order_side: 'sell',
           filled_quantity: 5,
           price_per_share: 110,
+          commission_amount: 0,
           created_at: '2026-08-02T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -32,6 +34,7 @@ describe('summarizeOrderPosition', () => {
           order_side: 'buy',
           filled_quantity: 20,
           price_per_share: 90,
+          commission_amount: 0,
           created_at: '2026-08-03T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -42,6 +45,7 @@ describe('summarizeOrderPosition', () => {
           order_side: 'sell',
           filled_quantity: 4,
           price_per_share: 125,
+          commission_amount: 0,
           created_at: '2026-08-04T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -66,6 +70,7 @@ describe('summarizeOrderPosition', () => {
           order_side: 'buy',
           filled_quantity: 50,
           price_per_share: 100,
+          commission_amount: 0,
           created_at: '2026-08-01T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -76,6 +81,7 @@ describe('summarizeOrderPosition', () => {
           order_side: 'sell',
           filled_quantity: 5,
           price_per_share: 120,
+          commission_amount: 0,
           created_at: '2026-08-02T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -102,6 +108,7 @@ describe('summarizeDailyOrderPositionTimeline', () => {
           order_side: 'buy',
           filled_quantity: 10,
           price_per_share: 100,
+          commission_amount: 0,
           created_at: '2026-08-01T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -112,6 +119,7 @@ describe('summarizeDailyOrderPositionTimeline', () => {
           order_side: 'sell',
           filled_quantity: 5,
           price_per_share: 110,
+          commission_amount: 0,
           created_at: '2026-08-02T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -122,6 +130,7 @@ describe('summarizeDailyOrderPositionTimeline', () => {
           order_side: 'buy',
           filled_quantity: 20,
           price_per_share: 90,
+          commission_amount: 0,
           created_at: '2026-08-03T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -132,6 +141,7 @@ describe('summarizeDailyOrderPositionTimeline', () => {
           order_side: 'sell',
           filled_quantity: 4,
           price_per_share: 125,
+          commission_amount: 0,
           created_at: '2026-08-04T09:00:00-05:00',
           imported_at: null,
           created_at_symbol: null,
@@ -201,5 +211,53 @@ describe('summarizeDailyOrderPositionTimeline', () => {
     expect(timeline['2026-08-04']?.weightedAveragePrice).toBeCloseTo((100 + 20 * 90) / 21, 8)
     expect(timeline['2026-08-04']?.displayAveragePrice).toBeCloseTo((100 + 20 * 90) / 21, 8)
     expect(timeline['2026-08-04']?.deltaValue).toBeCloseTo(95 - 125, 8)
+  })
+
+  it('includes FIFO-weighted buy commission when computing sell-day total commission and net profit', () => {
+    const timeline = summarizeDailyOrderPositionTimeline(
+      'TEST',
+      [
+        {
+          symbol: 'TEST',
+          normalized_status: 'approved',
+          order_side: 'buy',
+          filled_quantity: 10,
+          price_per_share: 100,
+          commission_amount: 100,
+          created_at: '2026-08-01T09:00:00-05:00',
+          imported_at: null,
+          created_at_symbol: null,
+        },
+        {
+          symbol: 'TEST',
+          normalized_status: 'approved',
+          order_side: 'sell',
+          filled_quantity: 4,
+          price_per_share: 120,
+          commission_amount: 20,
+          created_at: '2026-08-02T09:00:00-05:00',
+          imported_at: null,
+          created_at_symbol: null,
+        },
+      ],
+      [
+        { tradingDate: '2026-08-01', lastPrice: 101 },
+        { tradingDate: '2026-08-02', lastPrice: 119 },
+      ],
+    )
+
+    expect(timeline['2026-08-01']).toMatchObject({
+      buyCount: 1,
+      sellCount: 0,
+      totalCommission: 100,
+      totalNetProfit: 0,
+    })
+
+    expect(timeline['2026-08-02']).toMatchObject({
+      availableQuantity: 6,
+      realizedProfit: 80,
+      totalCommission: 60,
+      totalNetProfit: 20,
+    })
   })
 })

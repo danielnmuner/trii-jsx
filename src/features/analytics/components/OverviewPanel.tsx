@@ -1,7 +1,8 @@
+import { useState, type ReactNode } from 'react'
 import type { AnalyticsSymbolFeed, HistoricStat, SessionVectorManifest, SessionVectorSegment } from '../api/schemas'
 import type { OrderPositionSummary } from '../lib/orderPosition'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
-import { OverviewSessionVectorTile } from './OverviewSessionVectorTile'
+import { OverviewSessionVectorTile, type SessionVectorHoverSnapshot } from './OverviewSessionVectorTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
 import { SymbolIdentity } from './SymbolIdentity'
 import { deriveFreshnessTone, formatFreshnessTimestamp } from '../lib/freshness'
@@ -60,13 +61,18 @@ type TapeItemData = {
     zScoreTone?: ZScoreTone
   }>
   signalMatrix?: {
+    dynamicLabel?: string
     rows: Array<{
+      label?: string
       expression: string
-      values: string
-      detail?: string
+      values: ReactNode
+      detail?: ReactNode
       tone: TapeTone
       highlightValues?: boolean
       highlightDetail?: boolean
+      dynamicDetail?: ReactNode
+      dynamicValues?: ReactNode
+      dynamicTone?: TapeTone
     }>
   }
   zScoreTone?: ZScoreTone
@@ -80,166 +86,257 @@ export function OverviewPanel({
   return (
     <section className="overview-stack" aria-label="Market overview">
       {snapshots.map((snapshot) => {
-        const current = snapshot.current_snapshot
-        const currentStats = snapshot.current_stats
-        const sampleCount = resolveSampleCount(currentStats)
-        const currentVwap = computeCumulativeVwap(current)
-        const currentSpread = deriveSpread(current.best_ask_price, current.best_bid_price)
-        const marketTone: TapeTone =
-          current.last_price !== null &&
-          current.last_price !== undefined &&
-          current.previous_close !== null &&
-          current.previous_close !== undefined
-            ? current.last_price >= current.previous_close
-              ? 'positive'
-              : 'negative'
-            : 'neutral'
-
-        const freshnessLabel = formatFreshnessTimestamp(current.captured_at)
-        const freshnessTone = deriveFreshnessTone(current.captured_at)
-        const sampleLabel = formatSampleCount(sampleCount)
-        const headerMeta = sampleLabel ? `${freshnessLabel} (${sampleLabel})` : freshnessLabel
-        const openAiUrl = buildOverviewQualitativeOpenAiUrl(snapshot)
-        const tradedVolumeZScore = buildZScoreContext(currentStats.traded_volume)
-        const tradedValueZScore = buildZScoreContext(currentStats.traded_value)
-        const sessionVector = sessionVectorsBySymbol[snapshot.symbol]
-        const isCrossedBook = isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price)
-
-        const topItems: TapeItemData[] = [
-          buildTacticalReadItem(current, currentStats, currentVwap, currentSpread),
-          {
-            key: 'session_vector',
-            className: 'overview-tape__item overview-tape__item--session-vector-slot',
-          },
-          {
-            key: 'range_flow',
-            className: 'overview-tape__item overview-tape__item--paired overview-tape__item--range-flow',
-            pairs: [
-              { label: 'High price', value: formatMetricValue('high_price', current.high_price) },
-              { label: 'Low price', value: formatMetricValue('low_price', current.low_price) },
-              {
-                label: 'Traded volume',
-                value: formatMetricValue('traded_volume', current.traded_volume),
-                secondary: buildPreviousMetricValue('traded_volume', current.traded_volume, snapshot.previous_snapshot?.traded_volume),
-                zScore: tradedVolumeZScore.zScore,
-                zScoreTone: tradedVolumeZScore.tone,
-              },
-              {
-                label: 'Traded value',
-                value: formatMetricValue('traded_value', current.traded_value),
-                secondary: buildPreviousMetricValue('traded_value', current.traded_value, snapshot.previous_snapshot?.traded_value),
-                zScore: tradedValueZScore.zScore,
-                zScoreTone: tradedValueZScore.tone,
-              },
-            ],
-          },
-        ]
-
         return (
-          <article key={snapshot.symbol} className="overview-card">
-            <header className="overview-card__header">
-              <div className="overview-card__title">
-                <h3>
-                  <a
-                    href={openAiUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="overview-card__titleLink"
-                    aria-label={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
-                    title={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
-                  >
-                    <SymbolIdentity symbol={snapshot.symbol} />
-                  </a>
-                </h3>
-                <div className="overview-card__headlineQuote">
-                  <strong className={`overview-card__headlinePrice overview-card__headlinePrice--${marketTone}`}>
-                    {formatMetricValue('last_price', current.last_price)}
-                  </strong>
-                  <span className={`overview-card__headlineDelta overview-card__headlineDelta--${marketTone}`}>
-                    {formatBandDelta('last_price', current.last_price, current.previous_close)}
-                    {current.daily_change_percent === null || current.daily_change_percent === undefined
-                      ? ''
-                      : ` (${formatPercentFromWhole(current.daily_change_percent)})`}
-                  </span>
-                </div>
-                <div className="overview-card__headlineBook">
-                  <span className={`overview-tape__badge overview-tape__badge--${isCrossedBook ? 'stale' : 'fresh'}`}>
-                    {isCrossedBook ? 'Stop' : 'Normal'}
-                  </span>
-                  <div className="overview-card__headlineBookQuote">
-                    <span className="overview-card__headlineBookLabel overview-card__headlineBookLabel--ask">Ask</span>
-                    <strong className="overview-card__headlineBookValue overview-card__headlineBookValue--ask">
-                      {formatMetricValue('best_ask_price', current.best_ask_price)}
-                    </strong>
-                  </div>
-                  <div className="overview-card__headlineBookQuote">
-                    <span className="overview-card__headlineBookLabel overview-card__headlineBookLabel--bid">Bid</span>
-                    <strong className="overview-card__headlineBookValue overview-card__headlineBookValue--bid">
-                      {formatMetricValue('best_bid_price', current.best_bid_price)}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-              <span className={`overview-card__meta overview-card__meta--${freshnessTone}`}>{headerMeta}</span>
-            </header>
-
-            <div
-              className="overview-tape overview-tape--microstructure"
-              role="group"
-              aria-label={`${snapshot.symbol} microstructure tape`}
-            >
-              <div className="overview-tape__row overview-tape__row--microstructure">
-                {topItems.map((item) =>
-                  item.key === 'session_vector' ? (
-                    <OverviewSessionVectorTile
-                      key={item.key}
-                      dataset={sessionVector}
-                      referenceHigh={current.high_price ?? null}
-                      referenceLow={current.low_price ?? null}
-                    />
-                  ) : (
-                    <TapeItem key={item.key} item={item} />
-                  ),
-                )}
-              </div>
-            </div>
-
-            <div className="overview-tape overview-tape--market" role="group" aria-label={`${snapshot.symbol} market tape`}>
-              <div className="overview-tape__row overview-tape__row--market">
-                <SeasonalityMiniChart profile={snapshot.seasonality_profile} capturedAt={current.captured_at} />
-                <DeterministicSimulationTile snapshot={current} positionSummary={orderPositionsBySymbol[snapshot.symbol]} />
-              </div>
-            </div>
-          </article>
+          <OverviewSnapshotCard
+            key={snapshot.symbol}
+            snapshot={snapshot}
+            orderPositionSummary={orderPositionsBySymbol[snapshot.symbol]}
+            sessionVector={sessionVectorsBySymbol[snapshot.symbol]}
+          />
         )
       })}
     </section>
   )
 }
 
+function OverviewSnapshotCard({
+  snapshot,
+  orderPositionSummary,
+  sessionVector,
+}: {
+  snapshot: AnalyticsSymbolFeed
+  orderPositionSummary?: OrderPositionSummary
+  sessionVector?:
+    | {
+        symbol: string
+        tradingDate: string
+        samplingSeconds: number
+        samplesPerSegment: number
+        segmentCount: number
+        manifest: SessionVectorManifest | null
+        segments: SessionVectorSegment[]
+      }
+    | undefined
+}) {
+  const [sessionHover, setSessionHover] = useState<SessionVectorHoverSnapshot | null>(null)
+  const current = snapshot.current_snapshot
+  const currentStats = snapshot.current_stats
+  const sampleCount = resolveSampleCount(currentStats)
+  const currentVwap = computeCumulativeVwap(current)
+  const currentSpread = deriveSpread(current.best_ask_price, current.best_bid_price)
+  const marketTone: TapeTone =
+    current.last_price !== null &&
+    current.last_price !== undefined &&
+    current.previous_close !== null &&
+    current.previous_close !== undefined
+      ? current.last_price >= current.previous_close
+        ? 'positive'
+        : 'negative'
+      : 'neutral'
+
+  const freshnessLabel = formatFreshnessTimestamp(current.captured_at)
+  const freshnessTone = deriveFreshnessTone(current.captured_at)
+  const sampleLabel = formatSampleCount(sampleCount)
+  const headerMeta = sampleLabel ? `${freshnessLabel} (${sampleLabel})` : freshnessLabel
+  const openAiUrl = buildOverviewQualitativeOpenAiUrl(snapshot)
+  const tradedVolumeZScore = buildZScoreContext(currentStats.traded_volume)
+  const tradedValueZScore = buildZScoreContext(currentStats.traded_value)
+  const isCrossedBook = isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price)
+
+  const topItems: TapeItemData[] = [
+    buildTacticalReadItem(current, currentStats, currentVwap, currentSpread, sessionHover),
+    {
+      key: 'session_vector',
+      className: 'overview-tape__item overview-tape__item--session-vector-slot',
+    },
+  ]
+
+  return (
+    <article className="overview-card">
+      <header className="overview-card__header">
+        <div className="overview-card__title">
+          <h3>
+            <a
+              href={openAiUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="overview-card__titleLink"
+              aria-label={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
+              title={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
+            >
+              <SymbolIdentity symbol={snapshot.symbol} />
+            </a>
+          </h3>
+          <div className="overview-card__headlineQuote">
+            <strong className={`overview-card__headlinePrice overview-card__headlinePrice--${marketTone}`}>
+              {formatMetricValue('last_price', current.last_price)}
+            </strong>
+            <span className={`overview-card__headlineDelta overview-card__headlineDelta--${marketTone}`}>
+              {formatBandDelta('last_price', current.last_price, current.previous_close)}
+              {current.daily_change_percent === null || current.daily_change_percent === undefined
+                ? ''
+                : ` (${formatPercentFromWhole(current.daily_change_percent)})`}
+            </span>
+          </div>
+          <div className="overview-card__headlineBook">
+            <span className={`overview-tape__badge overview-tape__badge--${isCrossedBook ? 'stale' : 'fresh'}`}>
+              {isCrossedBook ? 'Stop' : 'Normal'}
+            </span>
+            <div className="overview-card__headlineBookQuote">
+              <span className="overview-card__headlineBookLabel overview-card__headlineBookLabel--ask">Ask</span>
+              <strong className="overview-card__headlineBookValue overview-card__headlineBookValue--ask">
+                {formatMetricValue('best_ask_price', current.best_ask_price)}
+              </strong>
+            </div>
+            <div className="overview-card__headlineBookQuote">
+              <span className="overview-card__headlineBookLabel overview-card__headlineBookLabel--bid">Bid</span>
+              <strong className="overview-card__headlineBookValue overview-card__headlineBookValue--bid">
+                {formatMetricValue('best_bid_price', current.best_bid_price)}
+              </strong>
+            </div>
+            <div className="overview-card__headlineRange" aria-label="Daily range">
+              <div className="overview-card__headlineRangeItem overview-card__headlineRangeItem--high">
+                <span className="overview-card__headlineRangeIcon" aria-hidden="true" />
+                <span className="overview-card__headlineRangeLabel">High</span>
+                <strong className="overview-card__headlineRangeValue">{formatMetricValue('high_price', current.high_price)}</strong>
+              </div>
+              <div className="overview-card__headlineRangeItem overview-card__headlineRangeItem--low">
+                <span className="overview-card__headlineRangeIcon" aria-hidden="true" />
+                <span className="overview-card__headlineRangeLabel">Low</span>
+                <strong className="overview-card__headlineRangeValue">{formatMetricValue('low_price', current.low_price)}</strong>
+              </div>
+            </div>
+            <div className="overview-card__headlineFlow" aria-label="Trading flow">
+              <div className="overview-card__headlineFlowItem">
+                <span className="overview-card__headlineFlowIcon" aria-hidden="true" />
+                <span className="overview-card__headlineFlowLabel">Vol</span>
+                <strong className="overview-card__headlineFlowValue">
+                  {formatMetricValue('traded_volume', current.traded_volume)}
+                </strong>
+                {tradedVolumeZScore.zScore ? (
+                  <span className="overview-card__headlineFlowZscore">{tradedVolumeZScore.zScore}</span>
+                ) : null}
+              </div>
+              <div className="overview-card__headlineFlowItem">
+                <span className="overview-card__headlineFlowIcon" aria-hidden="true" />
+                <span className="overview-card__headlineFlowLabel">TV</span>
+                <strong className="overview-card__headlineFlowValue">
+                  {formatMetricValue('traded_value', current.traded_value)}
+                </strong>
+                {tradedValueZScore.zScore ? (
+                  <span className="overview-card__headlineFlowZscore">{tradedValueZScore.zScore}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+        <span className={`overview-card__meta overview-card__meta--${freshnessTone}`}>{headerMeta}</span>
+      </header>
+
+      <div className="overview-tape overview-tape--microstructure" role="group" aria-label={`${snapshot.symbol} microstructure tape`}>
+        <div className="overview-tape__row overview-tape__row--microstructure">
+          {topItems.map((item) =>
+            item.key === 'session_vector' ? (
+              <OverviewSessionVectorTile
+                key={item.key}
+                dataset={sessionVector}
+                referenceHigh={current.high_price ?? null}
+                referenceLow={current.low_price ?? null}
+                onHoverChange={setSessionHover}
+              />
+            ) : (
+              <TapeItem key={item.key} item={item} />
+            ),
+          )}
+        </div>
+      </div>
+
+      <div className="overview-tape overview-tape--market" role="group" aria-label={`${snapshot.symbol} market tape`}>
+        <div className="overview-tape__row overview-tape__row--market">
+          <SeasonalityMiniChart profile={snapshot.seasonality_profile} capturedAt={current.captured_at} />
+          <DeterministicSimulationTile snapshot={current} positionSummary={orderPositionSummary} />
+        </div>
+      </div>
+    </article>
+  )
+}
+
 function TapeItem({ item }: { item: TapeItemData }) {
   if (item.signalMatrix) {
+    const hasDynamic = Boolean(item.signalMatrix.dynamicLabel)
     return (
       <section className={item.className}>
         <div className="overview-signal">
-          <div className="overview-signal__matrix" role="table" aria-label="Tactical signal matrix">
+          <div className="overview-signal__legend" aria-label="Signal legend">
+            <span className="overview-signal__legendItem">
+              <span className="overview-signal__legendSwatch overview-signal__legendSwatch--last" aria-hidden="true" />
+              <span>Last</span>
+            </span>
+            <span className="overview-signal__legendItem">
+              <span className="overview-signal__legendSwatch overview-signal__legendSwatch--mid" aria-hidden="true" />
+              <span>Mid</span>
+            </span>
+            <span className="overview-signal__legendItem">
+              <span className="overview-signal__legendSwatch overview-signal__legendSwatch--vwap" aria-hidden="true" />
+              <span>VWAP</span>
+            </span>
+          </div>
+          <div
+            className={`overview-signal__matrix${hasDynamic ? ' overview-signal__matrix--compare' : ''}`}
+            role="table"
+            aria-label="Tactical signal matrix"
+          >
+            {hasDynamic ? (
+              <div className="overview-signal__compareHeader" role="row">
+                <span className="overview-signal__compareHeaderSpacer" aria-hidden="true" />
+                <span className="overview-signal__compareHeaderLabel" role="columnheader">
+                  Now
+                </span>
+                <span className="overview-signal__compareHeaderLabel overview-signal__compareHeaderLabel--dynamic" role="columnheader">
+                  {item.signalMatrix.dynamicLabel}
+                </span>
+              </div>
+            ) : null}
             {item.signalMatrix.rows.map((row) => (
-              <div key={row.expression} className="overview-signal__row" role="row">
+              <div
+                key={row.label ?? row.expression}
+                className={`overview-signal__row${row.dynamicDetail && row.dynamicValues ? ' overview-signal__row--compare' : ''}`}
+                role="row"
+              >
                 <span className={`overview-signal__expression overview-signal__expression--${row.tone}`} role="cell">
                   {row.expression}
                 </span>
-                <span
-                  className={`overview-signal__delta overview-signal__delta--${row.tone}${row.highlightDetail ? ' overview-signal__delta--highlight' : ''}`}
-                  role="cell"
-                >
-                  {row.detail ?? ''}
-                </span>
-                <span
-                  className={`overview-signal__values${row.highlightValues ? ' overview-signal__values--highlight' : ''}`}
-                  role="cell"
-                >
-                  {row.values}
-                </span>
+                {row.dynamicDetail && row.dynamicValues ? (
+                  <>
+                    <div className="overview-signal__compareBlock" role="cell">
+                      <span
+                        className={`overview-signal__delta overview-signal__delta--${row.tone}${row.highlightDetail ? ' overview-signal__delta--highlight' : ''}`}
+                      >
+                        {row.detail ?? ''}
+                      </span>
+                      <span className={`overview-signal__values${row.highlightValues ? ' overview-signal__values--highlight' : ''}`}>{row.values}</span>
+                    </div>
+                    <div className="overview-signal__compareBlock overview-signal__compareBlock--dynamic" role="cell">
+                      <span className={`overview-signal__delta overview-signal__delta--${row.dynamicTone ?? 'neutral'}`}>{row.dynamicDetail}</span>
+                      <span className="overview-signal__values">{row.dynamicValues}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={`overview-signal__delta overview-signal__delta--${row.tone}${row.highlightDetail ? ' overview-signal__delta--highlight' : ''}`}
+                      role="cell"
+                    >
+                      {row.detail ?? ''}
+                    </span>
+                    <span
+                      className={`overview-signal__values${row.highlightValues ? ' overview-signal__values--highlight' : ''}`}
+                      role="cell"
+                    >
+                      {row.values}
+                    </span>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -332,6 +429,7 @@ function buildTacticalReadItem(
   currentStats: Record<string, HistoricStat>,
   currentVwap: number | null,
   currentSpread: number | null,
+  sessionHover: SessionVectorHoverSnapshot | null = null,
 ): TapeItemData {
   const vwapStddev = resolveStatStddev(currentStats.vwap)
   const microVsMid = buildComparisonContext(current.microprice, current.mid_price)
@@ -345,25 +443,40 @@ function buildTacticalReadItem(
     key: 'tactical-read',
     className: 'overview-tape__item overview-tape__item--signal-stack',
     signalMatrix: {
+      dynamicLabel: sessionHover?.label,
       rows: [
-        buildSignalRow('Micro', current.microprice, 'Mid', current.mid_price, microVsMid),
-        buildSignalRow(
-          'Mid',
-          current.mid_price,
-          'VWAP',
-          currentVwap,
-          midVsVwap,
-          buildRelativeToVwapZScore(current.mid_price, currentVwap, vwapStddev),
+        applySessionHoverToSignalRow(
+          buildSignalRow('Micro', current.microprice, 'Mid', current.mid_price, microVsMid),
+          sessionHover?.rows[0],
         ),
-        buildSignalRow(
-          'Last',
-          current.last_price,
-          'VWAP',
-          currentVwap,
-          lastVsVwap,
-          buildRelativeToVwapZScore(current.last_price, currentVwap, vwapStddev),
+        applySessionHoverToSignalRow(
+          buildSignalRow(
+            'Mid',
+            current.mid_price,
+            'VWAP',
+            currentVwap,
+            midVsVwap,
+            buildRelativeToVwapZScore(current.mid_price, currentVwap, vwapStddev),
+          ),
+          sessionHover?.rows[1],
         ),
-        buildSpreadRow(current.spread_bps, currentSpread, spreadContext.zScore, spreadContext.highlight),
+        applySessionHoverToSignalRow(
+          buildSignalRow(
+            'Last',
+            current.last_price,
+            'VWAP',
+            currentVwap,
+            lastVsVwap,
+            buildRelativeToVwapZScore(current.last_price, currentVwap, vwapStddev),
+          ),
+          sessionHover?.rows[2],
+        ),
+        buildSpreadRow(
+          current.spread_bps,
+          currentSpread,
+          spreadContext.zScore,
+          spreadContext.highlight,
+        ),
         buildObiRow(
           current.obi_l1,
           current.obi_top_5,
@@ -374,6 +487,35 @@ function buildTacticalReadItem(
         ),
       ],
     },
+  }
+}
+
+function applySessionHoverToSignalRow(
+  row: NonNullable<TapeItemData['signalMatrix']>['rows'][number],
+  sessionHoverRow?: SessionVectorHoverSnapshot['rows'][number],
+) {
+  if (!sessionHoverRow) {
+    return row
+  }
+
+  return {
+    ...row,
+    dynamicDetail: buildComparisonDeltaNode(sessionHoverRow.detail, sessionHoverRow.tone),
+    dynamicValues:
+      sessionHoverRow.leftMetric &&
+      sessionHoverRow.rightMetric &&
+      sessionHoverRow.relation &&
+      sessionHoverRow.leftValue !== undefined &&
+      sessionHoverRow.rightValue !== undefined
+        ? buildSignalValuesNode(
+            sessionHoverRow.leftMetric,
+            sessionHoverRow.leftValue,
+            sessionHoverRow.relation,
+            sessionHoverRow.rightMetric,
+            sessionHoverRow.rightValue,
+          )
+        : sessionHoverRow.values,
+    dynamicTone: sessionHoverRow.tone,
   }
 }
 
@@ -415,25 +557,6 @@ function deriveZScoreTone(zScore: number): ZScoreTone {
   }
 
   return 'neutral'
-}
-
-function buildPreviousMetricValue(
-  metricKey: string,
-  current: number | null | undefined,
-  previous: number | null | undefined,
-) {
-  if (
-    current === null ||
-    current === undefined ||
-    previous === null ||
-    previous === undefined ||
-    Number.isNaN(current) ||
-    Number.isNaN(previous)
-  ) {
-    return 'Prev n/a'
-  }
-
-  return `Prev ${formatMetricValue(metricKey, previous)}`
 }
 
 function resolveSampleCount(currentStats: Record<string, HistoricStat>) {
@@ -554,9 +677,9 @@ function formatSignedPercent(value: number) {
 }
 
 function buildSignalRow(
-  leftLabel: string,
+  leftLabel: 'Micro' | 'Mid' | 'Last',
   leftValue: number | null | undefined,
-  rightLabel: string,
+  rightLabel: 'Mid' | 'VWAP',
   rightValue: number | null | undefined,
   comparison: ComparisonContext | null,
   zScore: { label: string; highlight: boolean } | undefined = undefined,
@@ -566,8 +689,15 @@ function buildSignalRow(
   return {
     label: `${leftLabel}-${rightLabel}`,
     expression: `${leftLabel.toUpperCase()} ${relation} ${rightLabel.toUpperCase()}`,
-    values: formatSignalValues(leftValue, rightValue, relation, zScore?.label),
-    detail: comparison ? formatComparisonDelta(comparison) : 'n/a',
+    values: buildSignalValuesNode(
+      leftLabel.toLowerCase() as SignalMetricKey,
+      leftValue,
+      relation,
+      rightLabel.toLowerCase() as SignalMetricKey,
+      rightValue,
+      zScore?.label,
+    ),
+    detail: comparison ? buildComparisonDeltaNode(formatComparisonDelta(comparison), deriveDeltaTone(comparison.delta)) : 'n/a',
     tone: deriveDeltaTone(comparison?.delta),
     highlightValues: zScore?.highlight,
   }
@@ -611,18 +741,6 @@ function deriveComparisonRelation(comparison: ComparisonContext | null) {
   }
 
   return '='
-}
-
-function formatSignalValues(
-  leftValue: number | null | undefined,
-  rightValue: number | null | undefined,
-  relation: string,
-  zScore?: string,
-) {
-  const left = formatMetricValue('last_price', leftValue)
-  const right = formatMetricValue('last_price', rightValue)
-
-  return `${left} ${relation} ${right}${zScore ? ` (${zScore})` : ''}`
 }
 
 function buildSpreadRow(
@@ -708,4 +826,36 @@ function deriveExecutionTone(spreadBps: number | null | undefined): TapeTone {
   }
 
   return 'neutral'
+}
+
+type SignalMetricKey = 'last' | 'mid' | 'vwap' | 'micro'
+
+function buildSignalValuesNode(
+  leftMetric: SignalMetricKey,
+  leftValue: number | null | undefined,
+  relation: string,
+  rightMetric: SignalMetricKey,
+  rightValue: number | null | undefined,
+  zScore?: string,
+) {
+  return (
+    <>
+      <span className={`overview-signal__metricToken overview-signal__metricToken--${leftMetric}`}>
+        {formatMetricValue('last_price', leftValue)}
+      </span>
+      <span className="overview-signal__metricRelation"> {relation} </span>
+      <span className={`overview-signal__metricToken overview-signal__metricToken--${rightMetric}`}>
+        {formatMetricValue('last_price', rightValue)}
+      </span>
+      {zScore ? <span className="overview-signal__metricZscore"> ({zScore})</span> : null}
+    </>
+  )
+}
+
+function buildComparisonDeltaNode(detail: string, tone: TapeTone) {
+  if (tone === 'neutral' || detail === 'n/a') {
+    return detail
+  }
+
+  return <span className="overview-signal__deltaContent">{detail}</span>
 }

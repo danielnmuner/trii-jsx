@@ -354,6 +354,7 @@ function DailyClosingTooltip({
 
   return (
     <div className="daily-close-tooltip" data-daily-close-tooltip="true" style={{ left: horizontalStyle, top: verticalStyle }}>
+      <div className="daily-close-tooltip__date">{formatShortDate(record.source_captured_at ?? record.trading_date)}</div>
       <div className="daily-close-tooltip__priceRow">
         <strong className="daily-close-tooltip__priceValue">{formatMetricValue('last_price', record.last_price)}</strong>
         <span className="daily-close-tooltip__referenceValue">
@@ -499,12 +500,10 @@ function buildDailyClosingChart(records: DailyClosingRecord[]) {
   const chartWidth = chartRight - chartLeft
   const chartHeight = chartBottom - chartTop
 
-  const timestamps = records
-    .map((record) => new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime())
-    .filter((value) => !Number.isNaN(value))
-  const minTime = Math.min(...timestamps)
-  const maxTime = Math.max(...timestamps)
-  const timeDomain = maxTime - minTime || 1
+  const businessDayIndexByTradingDate = buildBusinessDayIndex(records)
+  const businessDayOffsets = records
+    .map((record, index) => resolveBusinessDayOffset(record, businessDayIndexByTradingDate, index))
+  const maxBusinessDayOffset = Math.max(...businessDayOffsets, 0)
 
   const values = records
     .flatMap((record) => [record.last_price, record.high_price, record.low_price, record.best_bid_price, record.best_ask_price])
@@ -530,8 +529,8 @@ function buildDailyClosingChart(records: DailyClosingRecord[]) {
       return chartLeft + chartWidth / 2
     }
 
-    const timeValue = new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime()
-    const xRatio = Number.isNaN(timeValue) ? index / Math.max(records.length - 1, 1) : (timeValue - minTime) / timeDomain
+    const businessDayOffset = resolveBusinessDayOffset(record, businessDayIndexByTradingDate, index)
+    const xRatio = maxBusinessDayOffset <= 0 ? index / Math.max(records.length - 1, 1) : businessDayOffset / maxBusinessDayOffset
     return chartLeft + xRatio * chartWidth
   }
 
@@ -577,7 +576,7 @@ function buildDailyClosingChart(records: DailyClosingRecord[]) {
       points.map((point) => ({ x: point.x, y: point.lowY })),
     ),
     points,
-    xTicks: buildDailyClosingTicks(records, minTime, timeDomain, chartLeft, chartWidth),
+    xTicks: buildDailyClosingTicks(records, businessDayIndexByTradingDate, maxBusinessDayOffset, chartLeft, chartWidth),
     yTicks: buildDailyClosingYTicks(yMin, yMax, chartTop, chartBottom),
     volumeTicks: buildDailyClosingValueTicks(tradedValueMax, chartTop, chartBottom),
     volumeBars: points.map((point) => ({
@@ -613,8 +612,8 @@ function computeDynamicBarWidth(xs: number[], chartWidth: number) {
 
 function buildDailyClosingTicks(
   records: DailyClosingRecord[],
-  minTime: number,
-  timeDomain: number,
+  businessDayIndexByTradingDate: Map<string, number>,
+  maxBusinessDayOffset: number,
   chartLeft: number,
   chartWidth: number,
 ) {
@@ -624,8 +623,8 @@ function buildDailyClosingTicks(
 
   return tickIndexes.map((index) => {
     const record = records[index]
-    const timeValue = new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime()
-    const xRatio = Number.isNaN(timeValue) ? index / Math.max(records.length - 1, 1) : (timeValue - minTime) / (timeDomain || 1)
+    const businessDayOffset = resolveBusinessDayOffset(record, businessDayIndexByTradingDate, index)
+    const xRatio = maxBusinessDayOffset <= 0 ? index / Math.max(records.length - 1, 1) : businessDayOffset / maxBusinessDayOffset
     const date = new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`)
 
     return {
@@ -642,6 +641,65 @@ function buildDailyClosingTicks(
       }).format(date),
     }
   })
+}
+
+function buildBusinessDayIndex(records: DailyClosingRecord[]) {
+  const tradingDates = records
+    .map((record) => record.trading_date)
+    .filter((value): value is string => Boolean(value && value.trim().length > 0))
+  const firstTradingDate = tradingDates[0]
+  const lastTradingDate = tradingDates[tradingDates.length - 1]
+
+  if (!firstTradingDate || !lastTradingDate) {
+    return new Map<string, number>()
+  }
+
+  const start = parseDateKey(firstTradingDate)
+  const end = parseDateKey(lastTradingDate)
+  if (!start || !end) {
+    return new Map<string, number>()
+  }
+
+  const indexByTradingDate = new Map<string, number>()
+  let businessIndex = 0
+  const cursor = new Date(start.getTime())
+
+  while (cursor.getTime() <= end.getTime()) {
+    const dateKey = toDateKey(cursor)
+    if (isColombiaBusinessDateKey(dateKey)) {
+      indexByTradingDate.set(dateKey, businessIndex)
+      businessIndex += 1
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return indexByTradingDate
+}
+
+function resolveBusinessDayOffset(
+  record: DailyClosingRecord,
+  businessDayIndexByTradingDate: Map<string, number>,
+  fallbackIndex: number,
+) {
+  const businessDayOffset = businessDayIndexByTradingDate.get(record.trading_date)
+  return typeof businessDayOffset === 'number' ? businessDayOffset : fallbackIndex
+}
+
+function parseDateKey(dateKey: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+  if (!match) {
+    return null
+  }
+
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+}
+
+function toDateKey(date: Date) {
+  const year = date.getUTCFullYear()
+  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getUTCDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function buildLinearPath(points: Array<{ x: number; y: number }>) {
@@ -761,4 +819,29 @@ function formatTimeOnly(value: string | null | undefined) {
     minute: '2-digit',
     hour12: false,
   }).format(date)
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) {
+    return '--:--:--'
+  }
+
+  const date = new Date(value)
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Bogota',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    })
+      .format(date)
+      .replace(/\//g, '-')
+  }
+
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) {
+    return '--:--:--'
+  }
+
+  return `${match[3]}-${match[2]}-${match[1].slice(-2)}`
 }

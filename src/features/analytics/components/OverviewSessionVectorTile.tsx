@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import type { SessionVectorManifest, SessionVectorSegment } from '../api/schemas'
 import { formatInteger, formatNumber } from '../lib/formatters'
 
@@ -16,6 +16,7 @@ type OverviewSessionVectorTileProps = {
   dataset?: SessionVectorWindow | null
   referenceHigh?: number | null
   referenceLow?: number | null
+  onHoverChange?: (hoverSnapshot: SessionVectorHoverSnapshot | null) => void
 }
 
 type SessionVectorPoint = {
@@ -31,6 +32,16 @@ type SessionVectorHoverRow = {
   detail: string
   values: string
   tone: 'positive' | 'negative' | 'neutral'
+  leftMetric?: 'micro' | 'mid' | 'last'
+  rightMetric?: 'mid' | 'vwap'
+  leftValue?: number | null
+  rightValue?: number | null
+  relation?: string
+}
+
+export type SessionVectorHoverSnapshot = {
+  label: string
+  rows: SessionVectorHoverRow[]
 }
 
 type SessionVectorHoverPoint = SessionVectorPoint & {
@@ -56,6 +67,7 @@ export function OverviewSessionVectorTile({
   dataset,
   referenceHigh = null,
   referenceLow = null,
+  onHoverChange,
 }: OverviewSessionVectorTileProps) {
   const [windowHours, setWindowHours] = useState<(typeof WINDOW_OPTIONS)[number]>(8)
   const chart = useMemo(
@@ -66,6 +78,20 @@ export function OverviewSessionVectorTile({
 
   const hoveredPoint =
     hoveredIndex === null ? null : chart.interactivePoints.find((point) => point.index === hoveredIndex) ?? null
+  const hoverSnapshot = useMemo<SessionVectorHoverSnapshot | null>(() => {
+    if (!hoveredPoint) {
+      return null
+    }
+
+    return {
+      label: `${formatSessionClock(dataset?.manifest?.session_start, dataset?.tradingDate, hoveredPoint.index, dataset?.samplingSeconds ?? 30)} #${formatNumber(hoveredPoint.index, 0)}`,
+      rows: buildHoverRows(hoveredPoint),
+    }
+  }, [dataset, hoveredPoint])
+
+  useEffect(() => {
+    onHoverChange?.(hoverSnapshot)
+  }, [hoverSnapshot, onHoverChange])
 
   if (!dataset || chart.points.length === 0) {
     return (
@@ -179,21 +205,6 @@ export function OverviewSessionVectorTile({
           <path d={chart.midPath} className="overview-session__path overview-session__path--mid" />
           <path d={chart.lastPath} className="overview-session__path overview-session__path--last" />
         </svg>
-        {hoveredPoint ? (
-          <div className="overview-session__hoverCard">
-            <div className="overview-session__hoverMeta">
-              <span>{formatSessionClock(dataset?.manifest?.session_start, dataset?.tradingDate, hoveredPoint.index, dataset?.samplingSeconds ?? 30)}</span>
-              <span>#{formatNumber(hoveredPoint.index, 0)}</span>
-            </div>
-            {buildHoverRows(hoveredPoint).map((row) => (
-              <div key={row.expression} className="overview-session__hoverRow">
-                <span className={`overview-session__hoverExpression overview-session__hoverExpression--${row.tone}`}>{row.expression}</span>
-                <span className={`overview-session__hoverDetail overview-session__hoverDetail--${row.tone}`}>{row.detail}</span>
-                <span className="overview-session__hoverValues">{row.values}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       <div className="overview-session__footer">
@@ -386,9 +397,9 @@ function buildHoverRows(point: SessionVectorPoint): SessionVectorHoverRow[] {
 }
 
 function buildHoverRow(
-  leftLabel: string,
+  leftLabel: 'Micro' | 'Mid' | 'Last',
   leftValue: number | null,
-  rightLabel: string,
+  rightLabel: 'Mid' | 'VWAP',
   rightValue: number | null,
 ): SessionVectorHoverRow {
   const comparison = buildComparisonContext(leftValue, rightValue)
@@ -400,6 +411,11 @@ function buildHoverRow(
     detail: formatComparisonDelta(comparison),
     values: `${formatInteger(leftValue)} ${relation} ${formatInteger(rightValue)}`,
     tone,
+    leftMetric: leftLabel.toLowerCase() as 'micro' | 'mid' | 'last',
+    rightMetric: rightLabel.toLowerCase() as 'mid' | 'vwap',
+    leftValue,
+    rightValue,
+    relation,
   }
 }
 

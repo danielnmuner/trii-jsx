@@ -10,13 +10,11 @@ import { DailyClosingPanel } from '../components/DailyClosingPanel'
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
 import { HistoricStatsPanel } from '../components/HistoricStatsPanel'
 import { OverviewPanel } from '../components/OverviewPanel'
-import { ZscoreOpportunityPanel } from '../components/ZscoreOpportunityPanel'
 import {
   useAnalyticsCatalog,
   useAnalyticsSnapshots,
   useDailyClosingSnapshots,
   useSessionVectors,
-  useZscoreOpportunityWindows,
 } from '../hooks/useAnalytics'
 import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTimeline'
 import { useOrderPositions } from '../hooks/useOrderPositions'
@@ -26,7 +24,7 @@ import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { rankCoreSymbols, resolveAvailableQuantity, resolveOwnedInvestmentValue, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
-const topTabs = ['Overview', 'Opportunities', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
+const topTabs = ['Overview', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
 
 function getErrorMessage(error: unknown, fallback = 'Unknown error') {
@@ -51,23 +49,9 @@ export function AnalyticsPage() {
         ? symbolOrder
         : symbols
   const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>('Overview')
-  const zscoreTradingDate = catalogQuery.data?.result.trading_date ?? null
 
   const snapshotsQuery = useAnalyticsSnapshots(querySelectedSymbols)
-  const zscoreQuery = useZscoreOpportunityWindows(querySelectedSymbols, zscoreTradingDate, activeTab === 'Opportunities')
   const dailyClosingQuery = useDailyClosingSnapshots(querySelectedSymbols, activeTab === 'Historic')
-  const latestZscoreBySymbol = useMemo(
-    () =>
-      Object.fromEntries(
-        zscoreQuery.results.map((window) => [
-          window.symbol,
-          [...window.records].sort(
-            (left, right) => new Date(right.captured_at).getTime() - new Date(left.captured_at).getTime(),
-          )[0],
-        ]),
-      ),
-    [zscoreQuery.results],
-  )
   const eligibleOverviewResults = useMemo(
     () => snapshotsQuery.results.filter((result) => resolveOverviewSampleCount(result) >= MIN_OVERVIEW_SAMPLE_COUNT),
     [snapshotsQuery.results],
@@ -151,17 +135,6 @@ export function AnalyticsPage() {
     [effectiveSelectedSymbols, eligibleOverviewResults],
   )
   const sessionVectorsQuery = useSessionVectors(orderedEligibleOverviewResults, activeTab === 'Overview')
-  const orderedZscoreResults = useMemo(
-    () =>
-      effectiveSelectedSymbols.reduce<typeof zscoreQuery.results>((ordered, symbol) => {
-        const match = zscoreQuery.results.find((result) => result.symbol === symbol)
-        if (match) {
-          ordered.push(match)
-        }
-        return ordered
-      }, []),
-    [effectiveSelectedSymbols, zscoreQuery.results],
-  )
   const orderedDailyClosingResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<typeof dailyClosingQuery.results>((ordered, symbol) => {
@@ -194,15 +167,14 @@ export function AnalyticsPage() {
           }
 
           const snapshot = snapshotsQuery.results.find((result) => result.symbol === symbol)?.current_snapshot
-          const zscoreRecord = latestZscoreBySymbol[symbol]
-          return resolveAvailableQuantity(snapshot, zscoreRecord) > 0
+          return resolveAvailableQuantity(snapshot, undefined) > 0
         })
         .sort(
           (left, right) =>
             resolveOwnedInvestmentValue(orderPositionsQuery.bySymbol[right]) -
             resolveOwnedInvestmentValue(orderPositionsQuery.bySymbol[left]),
         ),
-    [coreVisibleSymbols, latestZscoreBySymbol, orderPositionsQuery.bySymbol, snapshotsQuery.results],
+    [coreVisibleSymbols, orderPositionsQuery.bySymbol, snapshotsQuery.results],
   )
 
   const coreLatestBySymbol = useMemo(
@@ -286,13 +258,11 @@ export function AnalyticsPage() {
   const hasCatalogData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
   const hasSessionVectorData = sessionVectorsQuery.results.length > 0
-  const hasZscoreData = zscoreQuery.results.some((window) => window.records.length > 0)
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
 
   const catalogDegraded = catalogQuery.isError && hasCatalogData
   const snapshotDegraded = snapshotsQuery.isError && hasSnapshotData
   const sessionVectorDegraded = sessionVectorsQuery.isError && hasSessionVectorData
-  const zscoreDegraded = zscoreQuery.isError && hasZscoreData
   const dailyClosingDegraded = dailyClosingQuery.isError && hasDailyClosingData
   const activeDataStatus = useMemo(() => {
     if (activeTab === 'Paperwork') {
@@ -325,29 +295,6 @@ export function AnalyticsPage() {
       }
 
       if (snapshotDegraded || (activeTab === 'Overview' && sessionVectorDegraded)) {
-        return {
-          label: 'Degraded',
-          tone: 'degraded' as const,
-        }
-      }
-    }
-
-    if (activeTab === 'Opportunities') {
-      if (zscoreQuery.isLoading && !hasZscoreData) {
-        return {
-          label: 'Loading',
-          tone: 'loading' as const,
-        }
-      }
-
-      if (zscoreQuery.isFetching) {
-        return {
-          label: 'Syncing',
-          tone: 'fetching' as const,
-        }
-      }
-
-      if (zscoreDegraded) {
         return {
           label: 'Degraded',
           tone: 'degraded' as const,
@@ -407,16 +354,12 @@ export function AnalyticsPage() {
     hasDailyClosingData,
     hasSnapshotData,
     hasSessionVectorData,
-    hasZscoreData,
     snapshotDegraded,
     snapshotsQuery.isFetching,
     snapshotsQuery.isLoading,
     sessionVectorDegraded,
     sessionVectorsQuery.isFetching,
     sessionVectorsQuery.isLoading,
-    zscoreDegraded,
-    zscoreQuery.isFetching,
-    zscoreQuery.isLoading,
   ])
 
   return (
@@ -487,22 +430,6 @@ export function AnalyticsPage() {
             null
           ) : (
             <HistoricStatsPanel snapshots={orderedSnapshotResults} />
-          )
-        ) : null}
-
-        {activeTab === 'Opportunities' ? (
-          !hasZscoreData && zscoreQuery.isLoading ? (
-            null
-          ) : !hasZscoreData && zscoreQuery.isError ? (
-            <StatusState
-              tone="error"
-              title="Z-Score Request Failed"
-              description={getErrorMessage(zscoreQuery.error)}
-            />
-          ) : !hasZscoreData ? (
-            <StatusState title="No Data" description="No opportunity records are available in the active window for the selected symbols." />
-          ) : (
-            <ZscoreOpportunityPanel windows={orderedZscoreResults} />
           )
         ) : null}
 

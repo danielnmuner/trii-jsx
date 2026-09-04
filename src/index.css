@@ -4166,39 +4166,21 @@ button {
   stroke-dasharray: 2 6;
 }
 
-.daily-close-chart__band {
-  stroke-width: 0;
+.daily-close-chart__rangeLine {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.15;
+  stroke-dasharray: 3 5;
+  opacity: 0.94;
 }
 
-.daily-close-chart__band--upper {
-  fill: rgba(182, 96, 214, 0.5);
+.daily-close-chart__rangeLine--high {
+  stroke: rgba(255, 92, 124, 0.96);
 }
 
-.daily-close-chart__band--middle {
-  fill: rgba(66, 131, 222, 0.34);
-}
-
-.daily-close-chart__band--lower {
-  fill: rgba(104, 118, 214, 0.48);
-}
-
-.daily-close-chart__bandLabel {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  paint-order: stroke fill;
-  stroke: rgba(4, 7, 12, 0.92);
-  stroke-width: 1.1px;
-}
-
-.daily-close-chart__bandLabel--ask {
-  fill: rgba(240, 146, 255, 0.9);
-}
-
-.daily-close-chart__bandLabel--bid {
-  fill: rgba(152, 121, 255, 0.88);
+.daily-close-chart__rangeLine--low {
+  stroke: rgba(44, 255, 152, 0.96);
 }
 
 .daily-close-chart__volumeBar {

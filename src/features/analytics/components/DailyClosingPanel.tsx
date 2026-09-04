@@ -217,15 +217,8 @@ function DailyClosingCard({
             </g>
           ))}
 
-          <path d={chart.upperBandPath} className="daily-close-chart__band daily-close-chart__band--upper" />
-          <path d={chart.middleBandPath} className="daily-close-chart__band daily-close-chart__band--middle" />
-          <path d={chart.lowerBandPath} className="daily-close-chart__band daily-close-chart__band--lower" />
-          <text x="72" y="32" textAnchor="start" className="daily-close-chart__bandLabel daily-close-chart__bandLabel--ask">
-            ASK
-          </text>
-          <text x="72" y="228" textAnchor="start" className="daily-close-chart__bandLabel daily-close-chart__bandLabel--bid">
-            BID
-          </text>
+          <path d={chart.highPath} className="daily-close-chart__rangeLine daily-close-chart__rangeLine--high" />
+          <path d={chart.lowPath} className="daily-close-chart__rangeLine daily-close-chart__rangeLine--low" />
 
           {activePoint ? (
             <line
@@ -481,10 +474,9 @@ function OrderDetailsPopover({
 function buildDailyClosingChart(records: DailyClosingRecord[]) {
   if (records.length === 0) {
     return {
+      highPath: '',
       linePath: '',
-      upperBandPath: '',
-      middleBandPath: '',
-      lowerBandPath: '',
+      lowPath: '',
       points: [],
       xTicks: [],
       yTicks: [],
@@ -545,12 +537,10 @@ function buildDailyClosingChart(records: DailyClosingRecord[]) {
       key: buildDailyClosingKey(record),
       tradingDate: record.trading_date,
       x,
-      y,
-      label: record.trading_date,
       highY: priceY(record.high_price),
       lowY: priceY(record.low_price),
-      bidY: priceY(record.best_bid_price),
-      askY: priceY(record.best_ask_price),
+      y,
+      label: record.trading_date,
       volumeY: chartBottom - volumeHeight,
       volumeHeight,
     }
@@ -562,19 +552,9 @@ function buildDailyClosingChart(records: DailyClosingRecord[]) {
   )
 
   return {
+    highPath: buildSubtleSmoothedPath(points.map((point) => ({ x: point.x, y: point.highY }))),
     linePath: buildSubtleSmoothedPath(points.map((point) => ({ x: point.x, y: point.y }))),
-    upperBandPath: buildBandPath(
-      points.map((point) => ({ x: point.x, y: point.askY })),
-      points.map((point) => ({ x: point.x, y: point.highY })),
-    ),
-    middleBandPath: buildBandPath(
-      points.map((point) => ({ x: point.x, y: point.bidY })),
-      points.map((point) => ({ x: point.x, y: point.askY })),
-    ),
-    lowerBandPath: buildBandPath(
-      points.map((point) => ({ x: point.x, y: point.bidY })),
-      points.map((point) => ({ x: point.x, y: point.lowY })),
-    ),
+    lowPath: buildSubtleSmoothedPath(points.map((point) => ({ x: point.x, y: point.lowY }))),
     points,
     xTicks: buildDailyClosingTicks(records, businessDayIndexByTradingDate, maxBusinessDayOffset, chartLeft, chartWidth),
     yTicks: buildDailyClosingYTicks(yMin, yMax, chartTop, chartBottom),
@@ -737,20 +717,6 @@ function buildSubtleSmoothedPath(points: Array<{ x: number; y: number }>) {
   }
 
   return path
-}
-
-function buildBandPath(upper: Array<{ x: number; y: number }>, lower: Array<{ x: number; y: number }>) {
-  if (upper.length === 0 || lower.length === 0) {
-    return ''
-  }
-
-  const top = upper.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
-  const bottom = [...lower]
-    .reverse()
-    .map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-    .join(' ')
-
-  return `${top} ${bottom} Z`
 }
 
 function buildDailyClosingYTicks(yMin: number, yMax: number, chartTop: number, chartBottom: number) {

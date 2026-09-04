@@ -35,6 +35,14 @@ function resolveOverviewSampleCount(snapshot: AnalyticsSymbolFeed) {
   return Math.max(0, ...counts)
 }
 
+function hasSevereCoverageLoss(loadedCount: number, requestedCount: number, minimumCoverage = 0.5) {
+  if (requestedCount <= 0) {
+    return false
+  }
+
+  return loadedCount / requestedCount < minimumCoverage
+}
+
 export function AnalyticsPage() {
   const catalogQuery = useAnalyticsCatalog()
   const symbols = catalogQuery.data?.result.symbols ?? []
@@ -264,8 +272,14 @@ export function AnalyticsPage() {
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
 
   const catalogDegraded = catalogQuery.isError && hasCatalogData
-  const snapshotDegraded = snapshotsQuery.isError && hasSnapshotData
-  const dailyClosingDegraded = dailyClosingQuery.isError && hasDailyClosingData
+  const snapshotDegraded =
+    snapshotsQuery.isError &&
+    hasSnapshotData &&
+    hasSevereCoverageLoss(snapshotsQuery.results.length, querySelectedSymbols.length)
+  const dailyClosingDegraded =
+    dailyClosingQuery.isError &&
+    hasDailyClosingData &&
+    hasSevereCoverageLoss(orderedDailyClosingResults.length, querySelectedSymbols.length)
   const activeDataStatus = useMemo(() => {
     if (activeTab === 'Paperwork') {
       return {

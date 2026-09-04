@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import type { AnalyticsSymbolFeed, HistoricStat, SessionVectorManifest, SessionVectorSegment } from '../api/schemas'
+import { useEffect, useState, type ReactNode } from 'react'
+import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
 import type { OrderPositionSummary } from '../lib/orderPosition'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { OverviewSessionVectorTile, type SessionVectorHoverSnapshot } from './OverviewSessionVectorTile'
@@ -7,6 +7,8 @@ import { SeasonalityMiniChart } from './SeasonalityMiniChart'
 import { SymbolIdentity } from './SymbolIdentity'
 import { deriveFreshnessTone, formatFreshnessTimestamp } from '../lib/freshness'
 import { buildOverviewQualitativeOpenAiUrl } from '../lib/overviewOpenAiPrompt'
+import { useSessionVectorAvailableDays, useSessionVectorDay } from '../hooks/useAnalytics'
+import { resolveSessionVectorTradingDate } from '../lib/analyticsDataPolicy'
 import {
   computeCumulativeVwap,
   formatBandDelta,
@@ -18,19 +20,6 @@ import {
 type OverviewPanelProps = {
   snapshots: AnalyticsSymbolFeed[]
   orderPositionsBySymbol?: Record<string, OrderPositionSummary | undefined>
-  sessionVectorsBySymbol?: Record<
-    string,
-    | {
-        symbol: string
-        tradingDate: string
-        samplingSeconds: number
-        samplesPerSegment: number
-        segmentCount: number
-        manifest: SessionVectorManifest | null
-        segments: SessionVectorSegment[]
-      }
-    | undefined
-  >
 }
 
 type TapeTone = 'positive' | 'negative' | 'neutral'
@@ -81,7 +70,6 @@ type TapeItemData = {
 export function OverviewPanel({
   snapshots,
   orderPositionsBySymbol = {},
-  sessionVectorsBySymbol = {},
 }: OverviewPanelProps) {
   return (
     <section className="overview-stack" aria-label="Market overview">
@@ -91,7 +79,6 @@ export function OverviewPanel({
             key={snapshot.symbol}
             snapshot={snapshot}
             orderPositionSummary={orderPositionsBySymbol[snapshot.symbol]}
-            sessionVector={sessionVectorsBySymbol[snapshot.symbol]}
           />
         )
       })}
@@ -102,25 +89,39 @@ export function OverviewPanel({
 function OverviewSnapshotCard({
   snapshot,
   orderPositionSummary,
-  sessionVector,
 }: {
   snapshot: AnalyticsSymbolFeed
   orderPositionSummary?: OrderPositionSummary
-  sessionVector?:
-    | {
-        symbol: string
-        tradingDate: string
-        samplingSeconds: number
-        samplesPerSegment: number
-        segmentCount: number
-        manifest: SessionVectorManifest | null
-        segments: SessionVectorSegment[]
-      }
-    | undefined
 }) {
   const [sessionHover, setSessionHover] = useState<SessionVectorHoverSnapshot | null>(null)
+  const [selectedSessionVectorDate, setSelectedSessionVectorDate] = useState<string | null>(null)
   const current = snapshot.current_snapshot
   const currentStats = snapshot.current_stats
+  const liveSessionVectorTradingDate = resolveSessionVectorTradingDate(snapshot)
+  const sessionVectorDaysQuery = useSessionVectorAvailableDays(snapshot.symbol, liveSessionVectorTradingDate, true)
+  const availableSessionVectorDates = sessionVectorDaysQuery.data?.availableDates ?? []
+
+  useEffect(() => {
+    const nextDefaultTradingDate = availableSessionVectorDates[0] ?? null
+    if (!nextDefaultTradingDate) {
+      if (selectedSessionVectorDate !== null) {
+        setSelectedSessionVectorDate(null)
+      }
+      return
+    }
+
+    if (!selectedSessionVectorDate || !availableSessionVectorDates.includes(selectedSessionVectorDate)) {
+      setSelectedSessionVectorDate(nextDefaultTradingDate)
+    }
+  }, [availableSessionVectorDates, selectedSessionVectorDate])
+
+  const activeSessionVectorDate = selectedSessionVectorDate ?? availableSessionVectorDates[0] ?? null
+  const sessionVectorQuery = useSessionVectorDay(
+    snapshot.symbol,
+    activeSessionVectorDate,
+    liveSessionVectorTradingDate,
+    Boolean(activeSessionVectorDate),
+  )
   const sampleCount = resolveSampleCount(currentStats)
   const currentVwap = computeCumulativeVwap(current)
   const currentSpread = deriveSpread(current.best_ask_price, current.best_bid_price)
@@ -239,9 +240,13 @@ function OverviewSnapshotCard({
             item.key === 'session_vector' ? (
               <OverviewSessionVectorTile
                 key={item.key}
-                dataset={sessionVector}
+                dataset={sessionVectorQuery.data}
                 referenceHigh={current.high_price ?? null}
                 referenceLow={current.low_price ?? null}
+                availableTradingDates={availableSessionVectorDates}
+                selectedTradingDate={activeSessionVectorDate}
+                onTradingDateChange={setSelectedSessionVectorDate}
+                isLoading={sessionVectorDaysQuery.isLoading || (sessionVectorQuery.isLoading && !sessionVectorQuery.data)}
                 onHoverChange={setSessionHover}
               />
             ) : (

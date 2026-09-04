@@ -1141,43 +1141,48 @@ button {
 .overview-session__header {
   display: flex;
   align-items: flex-start;
-  justify-content: flex-start;
-  gap: 0;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.overview-session__windowTabs {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 3;
+.overview-session__dateTabs {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 5px;
+  flex-wrap: wrap;
 }
 
-.overview-session__windowTab {
-  border: none;
-  padding: 0;
-  background: transparent;
-  color: rgba(168, 182, 198, 0.58);
+.overview-session__dateTab {
+  border: 1px solid rgba(76, 91, 109, 0.34);
+  padding: 0.14rem 0.36rem;
+  background: rgba(9, 15, 28, 0.72);
+  color: rgba(168, 182, 198, 0.72);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.44rem;
+  font-size: 0.46rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1;
   text-transform: uppercase;
+  border-radius: 999px;
   cursor: pointer;
   transition:
     color 140ms ease,
-    opacity 140ms ease;
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
 }
 
-.overview-session__windowTab:hover {
-  color: rgba(140, 255, 206, 0.82);
+.overview-session__dateTab:hover {
+  color: rgba(224, 244, 255, 0.94);
+  border-color: rgba(96, 232, 255, 0.34);
 }
 
-.overview-session__windowTab--active {
-  color: rgba(140, 255, 206, 0.98);
+.overview-session__dateTab--active {
+  color: rgba(246, 253, 255, 0.98);
+  border-color: rgba(96, 232, 255, 0.82);
+  background: rgba(12, 23, 35, 0.9);
+  box-shadow: 0 0 0 1px rgba(96, 232, 255, 0.18), 0 0 12px rgba(96, 232, 255, 0.16);
 }
 
 .overview-session__legend {
@@ -5037,6 +5042,22 @@ button {
     border-bottom: none;
   }
 
+  .overview-session__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+
+  .overview-session__dateTabs {
+    justify-content: flex-start;
+    gap: 4px;
+  }
+
+  .overview-session__dateTab {
+    font-size: 0.44rem;
+    padding: 0.12rem 0.3rem;
+  }
+
   .overview-signal__row {
     grid-template-columns: minmax(0, 0.46fr) minmax(0, 0.62fr) minmax(0, 0.92fr);
   }
@@ -5173,6 +5194,10 @@ button {
   .overview-session__legend {
     gap: 6px;
     font-size: 0.36rem;
+  }
+
+  .overview-session__dateTabs {
+    width: 100%;
   }
 
   .overview-signal__row {

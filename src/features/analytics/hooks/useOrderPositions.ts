@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { fetchStockOrdersBySymbol } from '../../paperwork/api/client'
 import type { SnapshotRecord } from '../api/schemas'
-import { ANALYTICS_REALTIME_REFETCH_MS } from '../config'
+import { ANALYTICS_REALTIME_GC_MS, ANALYTICS_REALTIME_REFETCH_MS, ANALYTICS_REALTIME_STALE_MS } from '../config'
 import { summarizeOrderPosition, type OrderPositionSummary } from '../lib/orderPosition'
 
 export function useOrderPositions(snapshots: SnapshotRecord[], enabled: boolean) {
@@ -16,6 +16,8 @@ export function useOrderPositions(snapshots: SnapshotRecord[], enabled: boolean)
       enabled: enabled && Boolean(snapshot.symbol),
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
+      staleTime: ANALYTICS_REALTIME_STALE_MS,
+      gcTime: ANALYTICS_REALTIME_GC_MS,
     })),
   })
 

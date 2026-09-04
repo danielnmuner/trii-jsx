@@ -89,6 +89,43 @@ export function resolveOverviewTradingDate(reference = new Date()) {
   return bogotaDate
 }
 
+export function resolveSessionVectorTradingDate(feed: AnalyticsSymbolFeed) {
+  const policyTradingDate = resolveOverviewTradingDate()
+  const snapshotTradingDate =
+    typeof feed.current_snapshot.trading_date === 'string' && feed.current_snapshot.trading_date.trim().length > 0
+      ? feed.current_snapshot.trading_date
+      : getBogotaDateKey(feed.current_snapshot.captured_at)
+  const tradingDate = policyTradingDate ?? snapshotTradingDate
+  if (!tradingDate || !isColombiaBusinessDateKey(tradingDate)) {
+    return null
+  }
+
+  return tradingDate
+}
+
+export function buildTrailingBusinessDateKeys(anchorDate: string, count: number) {
+  if (count <= 0) {
+    return []
+  }
+
+  const [year, month, day] = anchorDate.split('-').map(Number)
+  const cursor = new Date(Date.UTC(year, month - 1, day))
+  if (Number.isNaN(cursor.getTime())) {
+    return [anchorDate]
+  }
+
+  const dates: string[] = []
+  while (dates.length < count) {
+    const dateKey = toDateKey(cursor)
+    if (isColombiaBusinessDateKey(dateKey)) {
+      dates.unshift(dateKey)
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+  }
+
+  return dates
+}
+
 function findPreviousBusinessDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number)
   const date = new Date(Date.UTC(year, month - 1, day))

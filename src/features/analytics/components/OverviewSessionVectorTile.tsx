@@ -16,6 +16,10 @@ type OverviewSessionVectorTileProps = {
   dataset?: SessionVectorWindow | null
   referenceHigh?: number | null
   referenceLow?: number | null
+  availableTradingDates?: string[]
+  selectedTradingDate?: string | null
+  onTradingDateChange?: (tradingDate: string) => void
+  isLoading?: boolean
   onHoverChange?: (hoverSnapshot: SessionVectorHoverSnapshot | null) => void
 }
 
@@ -57,8 +61,6 @@ type SessionGuide = {
   tone: 'high' | 'mid' | 'low'
 }
 
-const WINDOW_OPTIONS = [8, 4, 2, 1] as const
-
 const CHART_WIDTH = 260
 const CHART_HEIGHT = 94
 const CHART_PADDING = { top: 8, right: 6, bottom: 10, left: 4 }
@@ -67,13 +69,13 @@ export function OverviewSessionVectorTile({
   dataset,
   referenceHigh = null,
   referenceLow = null,
+  availableTradingDates = [],
+  selectedTradingDate = null,
+  onTradingDateChange,
+  isLoading = false,
   onHoverChange,
 }: OverviewSessionVectorTileProps) {
-  const [windowHours, setWindowHours] = useState<(typeof WINDOW_OPTIONS)[number]>(8)
-  const chart = useMemo(
-    () => buildSessionVectorChart(dataset, windowHours, referenceHigh, referenceLow),
-    [dataset, windowHours, referenceHigh, referenceLow],
-  )
+  const chart = useMemo(() => buildSessionVectorChart(dataset, referenceHigh, referenceLow), [dataset, referenceHigh, referenceLow])
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   const hoveredPoint =
@@ -93,6 +95,10 @@ export function OverviewSessionVectorTile({
     onHoverChange?.(hoverSnapshot)
   }, [hoverSnapshot, onHoverChange])
 
+  useEffect(() => {
+    setHoveredIndex(null)
+  }, [dataset?.tradingDate, selectedTradingDate])
+
   if (!dataset || chart.points.length === 0) {
     return (
       <section className="overview-tape__item overview-tape__item--session-vector" aria-label="Session vector">
@@ -100,25 +106,27 @@ export function OverviewSessionVectorTile({
           <div className="overview-session__titleBlock">
             <span className="overview-tape__label">Session Vector</span>
           </div>
+          {availableTradingDates.length > 0 ? (
+            <div className="overview-session__dateTabs" role="tablist" aria-label="Session vector trading dates">
+              {availableTradingDates.map((tradingDate) => {
+                const isActive = tradingDate === selectedTradingDate
+                return (
+                  <button
+                    key={tradingDate}
+                    type="button"
+                    className={`overview-session__dateTab${isActive ? ' overview-session__dateTab--active' : ''}`}
+                    onClick={() => onTradingDateChange?.(tradingDate)}
+                    aria-pressed={isActive}
+                  >
+                    {formatTradingDateChip(tradingDate)}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
         </div>
         <div className="overview-session__chartWrap">
-          <div className="overview-session__windowTabs" role="tablist" aria-label="Session vector window">
-            {WINDOW_OPTIONS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={`overview-session__windowTab${windowHours === option ? ' overview-session__windowTab--active' : ''}`}
-                onClick={() => {
-                  setWindowHours(option)
-                  setHoveredIndex(null)
-                }}
-                aria-pressed={windowHours === option}
-              >
-                {option}H
-              </button>
-            ))}
-          </div>
-          <div className="overview-session__empty">No intraday vector</div>
+          <div className="overview-session__empty">{isLoading ? 'Loading intraday vector' : 'No intraday vector'}</div>
         </div>
       </section>
     )
@@ -130,25 +138,27 @@ export function OverviewSessionVectorTile({
         <div className="overview-session__titleBlock">
           <span className="overview-tape__label">Session Vector</span>
         </div>
+        {availableTradingDates.length > 0 ? (
+          <div className="overview-session__dateTabs" role="tablist" aria-label="Session vector trading dates">
+            {availableTradingDates.map((tradingDate) => {
+              const isActive = tradingDate === selectedTradingDate
+              return (
+                <button
+                  key={tradingDate}
+                  type="button"
+                  className={`overview-session__dateTab${isActive ? ' overview-session__dateTab--active' : ''}`}
+                  onClick={() => onTradingDateChange?.(tradingDate)}
+                  aria-pressed={isActive}
+                >
+                  {formatTradingDateChip(tradingDate)}
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="overview-session__chartWrap">
-        <div className="overview-session__windowTabs" role="tablist" aria-label="Session vector window">
-          {WINDOW_OPTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`overview-session__windowTab${windowHours === option ? ' overview-session__windowTab--active' : ''}`}
-              onClick={() => {
-                setWindowHours(option)
-                setHoveredIndex(null)
-              }}
-              aria-pressed={windowHours === option}
-            >
-              {option}H
-            </button>
-          ))}
-        </div>
         <div className="overview-session__legend" aria-label="Session vector legend">
           <span className="overview-session__legendItem">
             <span className="overview-session__legendSwatch overview-session__legendSwatch--last" />
@@ -218,12 +228,11 @@ export function OverviewSessionVectorTile({
 
 function buildSessionVectorChart(
   dataset?: SessionVectorWindow | null,
-  windowHours = 8,
   referenceHigh: number | null = null,
   referenceLow: number | null = null,
 ) {
   const points = flattenSessionVectorPoints(dataset)
-  const visiblePoints = selectWindowPoints(points, dataset, windowHours)
+  const visiblePoints = points
   const numericValues = visiblePoints.flatMap((point) =>
     [point.lastPrice, point.midPrice, point.vwap].filter((value): value is number => typeof value === 'number' && !Number.isNaN(value)),
   )
@@ -294,23 +303,6 @@ function buildSessionVectorChart(
       dataset?.samplingSeconds ?? 30,
     ),
   }
-}
-
-function selectWindowPoints(
-  points: SessionVectorPoint[],
-  dataset?: SessionVectorWindow | null,
-  windowHours = 8,
-) {
-  if (points.length === 0) {
-    return points
-  }
-
-  const latestIndex = points.at(-1)?.index ?? 0
-  const samplesPerHour = Math.max(1, Math.round(3600 / (dataset?.samplingSeconds ?? 30)))
-  const windowSamples = windowHours * samplesPerHour
-  const firstVisibleIndex = Math.max(0, latestIndex - windowSamples + 1)
-  const visiblePoints = points.filter((point) => point.index >= firstVisibleIndex)
-  return visiblePoints.length > 0 ? visiblePoints : points
 }
 
 function buildGuides(
@@ -557,4 +549,13 @@ function resolveSessionBoundary(
 
   const date = new Date(`${tradingDate}T${fallbackTime}`)
   return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatTradingDateChip(tradingDate: string) {
+  const [year, month, day] = tradingDate.split('-')
+  if (!year || !month || !day) {
+    return tradingDate
+  }
+
+  return `${day}-${month}`
 }

@@ -10,7 +10,7 @@ import {
   fetchSessionVectorSegments,
   fetchZscoreOpportunities,
 } from '../api/client'
-import { ANALYTICS_REALTIME_REFETCH_MS } from '../config'
+import { ANALYTICS_REALTIME_GC_MS, ANALYTICS_REALTIME_REFETCH_MS, ANALYTICS_REALTIME_STALE_MS } from '../config'
 import type {
   AnalyticsSymbolFeed,
   DailyClosingRecord,
@@ -21,12 +21,11 @@ import type {
   ZscoreOpportunityRecord,
 } from '../api/schemas'
 import {
+  buildTrailingBusinessDateKeys,
   filterDailyClosingRecords,
-  resolveOverviewTradingDate,
   filterZscoreOpportunityRecords,
   sanitizeAnalyticsSymbolFeed,
 } from '../lib/analyticsDataPolicy'
-import { getBogotaDateKey, isColombiaBusinessDateKey } from '../lib/colombiaBusinessCalendar'
 
 type SessionVectorWindow = {
   symbol: string
@@ -44,6 +43,8 @@ export function useAnalyticsCatalog() {
     queryFn: () => fetchAnalyticsCatalog(),
     refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
     refetchIntervalInBackground: true,
+    staleTime: ANALYTICS_REALTIME_STALE_MS,
+    gcTime: ANALYTICS_REALTIME_GC_MS,
   })
 }
 
@@ -65,6 +66,8 @@ export function useAnalyticsSnapshots(symbols: string[]) {
       },
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
+      staleTime: ANALYTICS_REALTIME_STALE_MS,
+      gcTime: ANALYTICS_REALTIME_GC_MS,
     })),
   })
 
@@ -151,6 +154,8 @@ export function useZscoreOpportunityWindows(symbols: string[], tradingDate: stri
       },
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
+      staleTime: ANALYTICS_REALTIME_STALE_MS,
+      gcTime: ANALYTICS_REALTIME_GC_MS,
       enabled: enabled && Boolean(symbol && anchorDate),
     })),
   })
@@ -186,6 +191,8 @@ export function useDailyClosingSnapshots(symbols: string[], enabled = true) {
       },
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
+      staleTime: ANALYTICS_REALTIME_STALE_MS,
+      gcTime: ANALYTICS_REALTIME_GC_MS,
       enabled: enabled && Boolean(symbol),
     })),
   })
@@ -207,84 +214,113 @@ export function useDailyClosingSnapshots(symbols: string[], enabled = true) {
   }, [queries])
 }
 
-export function useSessionVectors(feeds: AnalyticsSymbolFeed[], enabled = true) {
-  const queryClient = useQueryClient()
+export function useSessionVectorAvailableDays(symbol: string, tradingDateTo: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['analytics', 'session-vector-days', symbol, tradingDateTo],
+    queryFn: async () => {
+      if (!symbol || !tradingDateTo) {
+        return {
+          symbol,
+          tradingDateTo,
+          availableDates: [] as string[],
+          manifestsByDate: {} as Record<string, SessionVectorManifest>,
+        }
+      }
 
-  const queries = useQueries({
-    queries: feeds.map((feed) => {
-      const symbol = feed.symbol
-      const tradingDate = resolveSessionVectorTradingDate(feed)
+      const candidateDates = buildTrailingBusinessDateKeys(tradingDateTo, 5).reverse()
+      const responses = await Promise.all(candidateDates.map((candidateDate) => fetchSessionVectorHead(symbol, candidateDate)))
+      const availableDates: string[] = []
+      const manifestsByDate: Record<string, SessionVectorManifest> = {}
+
+      for (const response of responses) {
+        const manifest = response.result.manifest
+        const resolvedTradingDate = manifest?.trading_date ?? response.result.trading_date
+        if (!response.result.found || !manifest || !resolvedTradingDate || availableDates.includes(resolvedTradingDate)) {
+          continue
+        }
+
+        availableDates.push(resolvedTradingDate)
+        manifestsByDate[resolvedTradingDate] = manifest
+      }
 
       return {
-        queryKey: ['analytics', 'session-vector', symbol, tradingDate],
-        queryFn: async (): Promise<SessionVectorWindow | null> => {
-          if (!symbol || !tradingDate) {
-            return null
-          }
-
-          const queryKey = ['analytics', 'session-vector', symbol, tradingDate] as const
-          const cachedWindow = queryClient.getQueryData<SessionVectorWindow | null>(queryKey)
-
-          if (!cachedWindow) {
-            const response = await fetchSessionVector(symbol, tradingDate)
-            return normalizeSessionVectorWindow(response.result)
-          }
-
-          const headResponse = await fetchSessionVectorHead(symbol, tradingDate)
-          const manifest = headResponse.result.manifest ?? null
-
-          if (!headResponse.result.found || !manifest) {
-            return cachedWindow
-          }
-
-          if (isSessionVectorManifestCurrent(cachedWindow.manifest, manifest)) {
-            return {
-              ...cachedWindow,
-              manifest,
-              segmentCount: manifest.segment_count ?? cachedWindow.segmentCount,
-              samplingSeconds: manifest.sampling_seconds ?? cachedWindow.samplingSeconds,
-              samplesPerSegment: manifest.samples_per_segment ?? cachedWindow.samplesPerSegment,
-            }
-          }
-
-          const lastSegmentIndex = cachedWindow.segments.at(-1)?.segment_index ?? 0
-          const fromSegment = Math.max(0, Math.min(lastSegmentIndex, Math.max((manifest.segment_count ?? 1) - 1, 0)))
-          const segmentsResponse = await fetchSessionVectorSegments(symbol, tradingDate, fromSegment)
-
-          return {
-            symbol,
-            tradingDate,
-            samplingSeconds: manifest.sampling_seconds ?? cachedWindow.samplingSeconds,
-            samplesPerSegment: manifest.samples_per_segment ?? cachedWindow.samplesPerSegment,
-            segmentCount: manifest.segment_count ?? cachedWindow.segmentCount,
-            manifest,
-            segments: mergeSessionVectorSegments(cachedWindow.segments, segmentsResponse.result.segments ?? []),
-          }
-        },
-        refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
-        refetchIntervalInBackground: true,
-        enabled: enabled && Boolean(symbol && tradingDate),
+        symbol,
+        tradingDateTo,
+        availableDates,
+        manifestsByDate,
       }
-    }),
+    },
+    enabled: enabled && Boolean(symbol && tradingDateTo),
+    staleTime: ANALYTICS_REALTIME_STALE_MS,
+    gcTime: ANALYTICS_REALTIME_GC_MS,
   })
+}
 
-  return useMemo(() => {
-    const results = queries
-      .map((query) => query.data)
-      .filter((item): item is SessionVectorWindow => Boolean(item))
-    const bySymbol = Object.fromEntries(results.map((result) => [result.symbol, result]))
-    const lastUpdatedAt = queries.reduce((maxValue, query) => Math.max(maxValue, query.dataUpdatedAt ?? 0), 0)
+export function useSessionVectorDay(
+  symbol: string,
+  tradingDate: string | null,
+  liveTradingDate: string | null,
+  enabled = true,
+) {
+  const queryClient = useQueryClient()
+  const shouldPoll = Boolean(tradingDate && liveTradingDate && tradingDate === liveTradingDate)
 
-    return {
-      results,
-      bySymbol,
-      lastUpdatedAt,
-      isLoading: queries.some((query) => query.isLoading),
-      isFetching: queries.some((query) => query.isFetching),
-      isError: queries.some((query) => query.isError),
-      error: queries.find((query) => query.error)?.error ?? null,
-    }
-  }, [queries])
+  return useQuery({
+    queryKey: ['analytics', 'session-vector', symbol, tradingDate],
+    queryFn: async (): Promise<SessionVectorWindow | null> => {
+      if (!symbol || !tradingDate) {
+        return null
+      }
+
+      const queryKey = ['analytics', 'session-vector', symbol, tradingDate] as const
+      const cachedWindow = queryClient.getQueryData<SessionVectorWindow | null>(queryKey)
+
+      if (!cachedWindow) {
+        const response = await fetchSessionVector(symbol, tradingDate)
+        return normalizeSessionVectorWindow(response.result)
+      }
+
+      if (!shouldPoll) {
+        return cachedWindow
+      }
+
+      const headResponse = await fetchSessionVectorHead(symbol, tradingDate)
+      const manifest = headResponse.result.manifest ?? null
+
+      if (!headResponse.result.found || !manifest) {
+        return cachedWindow
+      }
+
+      if (isSessionVectorManifestCurrent(cachedWindow.manifest, manifest)) {
+        return {
+          ...cachedWindow,
+          manifest,
+          segmentCount: manifest.segment_count ?? cachedWindow.segmentCount,
+          samplingSeconds: manifest.sampling_seconds ?? cachedWindow.samplingSeconds,
+          samplesPerSegment: manifest.samples_per_segment ?? cachedWindow.samplesPerSegment,
+        }
+      }
+
+      const lastSegmentIndex = cachedWindow.segments.at(-1)?.segment_index ?? 0
+      const fromSegment = Math.max(0, Math.min(lastSegmentIndex, Math.max((manifest.segment_count ?? 1) - 1, 0)))
+      const segmentsResponse = await fetchSessionVectorSegments(symbol, tradingDate, fromSegment)
+
+      return {
+        symbol,
+        tradingDate,
+        samplingSeconds: manifest.sampling_seconds ?? cachedWindow.samplingSeconds,
+        samplesPerSegment: manifest.samples_per_segment ?? cachedWindow.samplesPerSegment,
+        segmentCount: manifest.segment_count ?? cachedWindow.segmentCount,
+        manifest,
+        segments: mergeSessionVectorSegments(cachedWindow.segments, segmentsResponse.result.segments ?? []),
+      }
+    },
+    refetchInterval: shouldPoll ? ANALYTICS_REALTIME_REFETCH_MS : false,
+    refetchIntervalInBackground: shouldPoll,
+    staleTime: shouldPoll ? ANALYTICS_REALTIME_STALE_MS : Infinity,
+    gcTime: ANALYTICS_REALTIME_GC_MS,
+    enabled: enabled && Boolean(symbol && tradingDate),
+  })
 }
 
 function mergeZscoreWindowRecords(existingRecords: ZscoreOpportunityRecord[], incomingRecords: ZscoreOpportunityRecord[]) {
@@ -300,50 +336,6 @@ function mergeZscoreWindowRecords(existingRecords: ZscoreOpportunityRecord[], in
   )
 
   return filterZscoreOpportunityRecords(sorted)
-}
-
-function buildTrailingBusinessDateKeys(anchorDate: string, count: number) {
-  if (count <= 0) {
-    return []
-  }
-
-  const [year, month, day] = anchorDate.split('-').map(Number)
-  const cursor = new Date(Date.UTC(year, month - 1, day))
-  if (Number.isNaN(cursor.getTime())) {
-    return [anchorDate]
-  }
-
-  const dates: string[] = []
-  while (dates.length < count) {
-    const dateKey = toDateKey(cursor)
-    if (isColombiaBusinessDateKey(dateKey)) {
-      dates.unshift(dateKey)
-    }
-    cursor.setUTCDate(cursor.getUTCDate() - 1)
-  }
-
-  return dates
-}
-
-function toDateKey(date: Date) {
-  const year = date.getUTCFullYear()
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getUTCDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function resolveSessionVectorTradingDate(feed: AnalyticsSymbolFeed) {
-  const policyTradingDate = resolveOverviewTradingDate()
-  const snapshotTradingDate =
-    typeof feed.current_snapshot.trading_date === 'string' && feed.current_snapshot.trading_date.trim().length > 0
-      ? feed.current_snapshot.trading_date
-      : getBogotaDateKey(feed.current_snapshot.captured_at)
-  const tradingDate = policyTradingDate ?? snapshotTradingDate
-  if (!tradingDate || !isColombiaBusinessDateKey(tradingDate)) {
-    return null
-  }
-
-  return tradingDate
 }
 
 function normalizeSessionVectorWindow(result: {

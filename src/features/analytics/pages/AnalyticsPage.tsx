@@ -14,7 +14,6 @@ import {
   useAnalyticsCatalog,
   useAnalyticsSnapshots,
   useDailyClosingSnapshots,
-  useSessionVectors,
 } from '../hooks/useAnalytics'
 import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTimeline'
 import { useOrderPositions } from '../hooks/useOrderPositions'
@@ -134,7 +133,6 @@ export function AnalyticsPage() {
       }, []),
     [effectiveSelectedSymbols, eligibleOverviewResults],
   )
-  const sessionVectorsQuery = useSessionVectors(orderedEligibleOverviewResults, activeTab === 'Overview')
   const orderedDailyClosingResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<typeof dailyClosingQuery.results>((ordered, symbol) => {
@@ -257,12 +255,10 @@ export function AnalyticsPage() {
 
   const hasCatalogData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
-  const hasSessionVectorData = sessionVectorsQuery.results.length > 0
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
 
   const catalogDegraded = catalogQuery.isError && hasCatalogData
   const snapshotDegraded = snapshotsQuery.isError && hasSnapshotData
-  const sessionVectorDegraded = sessionVectorsQuery.isError && hasSessionVectorData
   const dailyClosingDegraded = dailyClosingQuery.isError && hasDailyClosingData
   const activeDataStatus = useMemo(() => {
     if (activeTab === 'Paperwork') {
@@ -280,21 +276,21 @@ export function AnalyticsPage() {
     }
 
     if (activeTab === 'Overview' || activeTab === 'Benchmark Stats') {
-      if ((snapshotsQuery.isLoading && !hasSnapshotData) || (activeTab === 'Overview' && sessionVectorsQuery.isLoading && !hasSessionVectorData)) {
+      if (snapshotsQuery.isLoading && !hasSnapshotData) {
         return {
           label: 'Loading',
           tone: 'loading' as const,
         }
       }
 
-      if (snapshotsQuery.isFetching || (activeTab === 'Overview' && sessionVectorsQuery.isFetching)) {
+      if (snapshotsQuery.isFetching) {
         return {
           label: 'Syncing',
           tone: 'fetching' as const,
         }
       }
 
-      if (snapshotDegraded || (activeTab === 'Overview' && sessionVectorDegraded)) {
+      if (snapshotDegraded) {
         return {
           label: 'Degraded',
           tone: 'degraded' as const,
@@ -353,13 +349,9 @@ export function AnalyticsPage() {
     hasCatalogData,
     hasDailyClosingData,
     hasSnapshotData,
-    hasSessionVectorData,
     snapshotDegraded,
     snapshotsQuery.isFetching,
     snapshotsQuery.isLoading,
-    sessionVectorDegraded,
-    sessionVectorsQuery.isFetching,
-    sessionVectorsQuery.isLoading,
   ])
 
   return (
@@ -410,7 +402,6 @@ export function AnalyticsPage() {
             <OverviewPanel
               snapshots={orderedEligibleOverviewResults}
               orderPositionsBySymbol={orderPositionsQuery.bySymbol}
-              sessionVectorsBySymbol={sessionVectorsQuery.bySymbol}
             />
           )
         ) : null}

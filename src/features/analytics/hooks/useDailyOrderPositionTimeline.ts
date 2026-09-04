@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import type { DailyClosingRecord } from '../api/schemas'
-import { ANALYTICS_REALTIME_REFETCH_MS } from '../config'
+import { ANALYTICS_REALTIME_GC_MS, ANALYTICS_REALTIME_REFETCH_MS, ANALYTICS_REALTIME_STALE_MS } from '../config'
 import { summarizeDailyOrderPositionTimeline, type DailyOrderPositionSummary } from '../lib/orderPosition'
 import { fetchStockOrdersBySymbol } from '../../paperwork/api/client'
 
@@ -29,6 +29,8 @@ export function useDailyOrderPositionTimeline(windows: DailyClosingWindow[], ena
       enabled: enabled && Boolean(window.symbol),
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
+      staleTime: ANALYTICS_REALTIME_STALE_MS,
+      gcTime: ANALYTICS_REALTIME_GC_MS,
     })),
   })
 

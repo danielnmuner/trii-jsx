@@ -41,13 +41,19 @@ export function AnalyticsPage() {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
+  const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>('Overview')
+  const catalogReadySymbols = symbols.length > 0 ? symbols : []
+  const orderedCatalogSymbols =
+    symbolOrder.length > 0
+      ? [
+          ...symbolOrder.filter((symbol) => catalogReadySymbols.includes(symbol)),
+          ...catalogReadySymbols.filter((symbol) => !symbolOrder.includes(symbol)),
+        ]
+      : catalogReadySymbols
   const querySelectedSymbols =
     selectedSymbols.length > 0
-      ? symbolOrder.filter((symbol) => selectedSymbols.includes(symbol))
-      : symbolOrder.length > 0
-        ? symbolOrder
-        : symbols
-  const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>('Overview')
+      ? orderedCatalogSymbols.filter((symbol) => selectedSymbols.includes(symbol))
+      : orderedCatalogSymbols
 
   const snapshotsQuery = useAnalyticsSnapshots(querySelectedSymbols)
   const dailyClosingQuery = useDailyClosingSnapshots(querySelectedSymbols, activeTab === 'Historic')
@@ -321,14 +327,14 @@ export function AnalyticsPage() {
       }
     }
 
-    if (catalogQuery.isFetching) {
+    if (catalogQuery.isFetching && !hasSnapshotData && !hasDailyClosingData) {
       return {
         label: 'Syncing',
         tone: 'fetching' as const,
       }
     }
 
-    if (catalogDegraded) {
+    if (catalogDegraded && !hasSnapshotData && !hasDailyClosingData) {
       return {
         label: 'Degraded',
         tone: 'degraded' as const,

@@ -5,6 +5,7 @@ import {
   analyticsHistoricStatsResponseSchema,
   analyticsSnapshotResponseSchema,
   dailyClosingResponseSchema,
+  sessionVectorDaysResponseSchema,
   sessionVectorHeadResponseSchema,
   sessionVectorResponseSchema,
   sessionVectorSegmentsResponseSchema,
@@ -94,6 +95,15 @@ export async function fetchSessionVectorHead(symbol: string, tradingDate: string
   })
   const payload = await getJson(`/analytics/session-vector/head?${query.toString()}`)
   return sessionVectorHeadResponseSchema.parse(payload)
+}
+
+export async function fetchSessionVectorDays(symbol: string, days = 3) {
+  const query = new URLSearchParams({
+    symbol,
+    days: String(days),
+  })
+  const payload = await getJson(`/analytics/session-vector/days?${query.toString()}`)
+  return sessionVectorDaysResponseSchema.parse(payload)
 }
 
 export async function fetchSessionVectorSegments(symbol: string, tradingDate: string, fromSegment: number) {

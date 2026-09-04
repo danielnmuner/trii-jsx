@@ -312,6 +312,25 @@ export const sessionVectorHeadResponseSchema = z.object({
   }),
 })
 
+export const sessionVectorDayAvailabilitySchema = z.object({
+  trading_date: z.string(),
+  latest_captured_at: z.string().nullable().optional(),
+  latest_sample_index: z.number().nullable().optional(),
+  segment_count: z.number().nullable().optional(),
+})
+
+export const sessionVectorDaysResponseSchema = z.object({
+  status: z.literal('ok'),
+  result: z.object({
+    symbol: z.string(),
+    trading_date_to: z.string().nullable().optional(),
+    days_requested: z.number(),
+    available_day_count: z.number(),
+    default_trading_date: z.string().nullable().optional(),
+    available_dates: z.array(sessionVectorDayAvailabilitySchema).optional().default([]),
+  }),
+})
+
 export const sessionVectorSegmentsResponseSchema = z.object({
   status: z.literal('ok'),
   result: z.object({
@@ -339,6 +358,8 @@ export type SessionVectorManifest = z.infer<typeof sessionVectorManifestSchema>
 export type SessionVectorSegment = z.infer<typeof sessionVectorSegmentSchema>
 export type SessionVectorResponse = z.infer<typeof sessionVectorResponseSchema>
 export type SessionVectorHeadResponse = z.infer<typeof sessionVectorHeadResponseSchema>
+export type SessionVectorDaysResponse = z.infer<typeof sessionVectorDaysResponseSchema>
+export type SessionVectorDayAvailability = z.infer<typeof sessionVectorDayAvailabilitySchema>
 export type SessionVectorSegmentsResponse = z.infer<typeof sessionVectorSegmentsResponseSchema>
 export type AnalyticsSymbolFeed = AnalyticsSnapshotResult & {
   current_stats: Record<string, HistoricStat>

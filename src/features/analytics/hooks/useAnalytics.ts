@@ -5,6 +5,7 @@ import {
   fetchAnalyticsHistoricStats,
   fetchAnalyticsSnapshot,
   fetchDailyClosingSnapshots,
+  fetchSessionVectorDays,
   fetchSessionVector,
   fetchSessionVectorHead,
   fetchSessionVectorSegments,
@@ -16,6 +17,7 @@ import type {
   DailyClosingRecord,
   HistoricStat,
   SeasonalityProfile,
+  SessionVectorDayAvailability,
   SessionVectorManifest,
   SessionVectorSegment,
   ZscoreOpportunityRecord,
@@ -218,44 +220,27 @@ export function useSessionVectorAvailableDays(symbol: string, tradingDateTo: str
   return useQuery({
     queryKey: ['analytics', 'session-vector-days', symbol, tradingDateTo],
     queryFn: async () => {
-      if (!symbol || !tradingDateTo) {
+      if (!symbol) {
         return {
           symbol,
-          tradingDateTo,
-          availableDates: [] as string[],
-          manifestsByDate: {} as Record<string, SessionVectorManifest>,
+          tradingDateTo: tradingDateTo ?? null,
+          daysRequested: 3,
+          defaultTradingDate: null as string | null,
+          availableDates: [] as SessionVectorDayAvailability[],
         }
       }
 
-      const candidateDates = buildTrailingBusinessDateKeys(tradingDateTo, 5).reverse()
-      const responses = await Promise.allSettled(candidateDates.map((candidateDate) => fetchSessionVectorHead(symbol, candidateDate)))
-      const availableDates: string[] = []
-      const manifestsByDate: Record<string, SessionVectorManifest> = {}
-
-      for (const response of responses) {
-        if (response.status !== 'fulfilled') {
-          continue
-        }
-
-        const payload = response.value
-        const manifest = payload.result.manifest
-        const resolvedTradingDate = manifest?.trading_date ?? payload.result.trading_date
-        if (!payload.result.found || !manifest || !resolvedTradingDate || availableDates.includes(resolvedTradingDate)) {
-          continue
-        }
-
-        availableDates.push(resolvedTradingDate)
-        manifestsByDate[resolvedTradingDate] = manifest
-      }
+      const response = await fetchSessionVectorDays(symbol, 3)
 
       return {
         symbol,
-        tradingDateTo,
-        availableDates,
-        manifestsByDate,
+        tradingDateTo: response.result.trading_date_to ?? tradingDateTo ?? null,
+        daysRequested: response.result.days_requested,
+        defaultTradingDate: response.result.default_trading_date ?? null,
+        availableDates: response.result.available_dates ?? [],
       }
     },
-    enabled: enabled && Boolean(symbol && tradingDateTo),
+    enabled: enabled && Boolean(symbol),
     staleTime: ANALYTICS_REALTIME_STALE_MS,
     gcTime: ANALYTICS_REALTIME_GC_MS,
   })

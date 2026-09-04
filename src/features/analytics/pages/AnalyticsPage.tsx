@@ -303,13 +303,6 @@ export function AnalyticsPage() {
         }
       }
 
-      if (snapshotsQuery.isFetching) {
-        return {
-          label: 'Syncing',
-          tone: 'fetching' as const,
-        }
-      }
-
       if (snapshotDegraded) {
         return {
           label: 'Degraded',
@@ -326,13 +319,6 @@ export function AnalyticsPage() {
         }
       }
 
-      if (dailyClosingQuery.isFetching) {
-        return {
-          label: 'Syncing',
-          tone: 'fetching' as const,
-        }
-      }
-
       if (dailyClosingDegraded) {
         return {
           label: 'Degraded',
@@ -341,7 +327,7 @@ export function AnalyticsPage() {
       }
     }
 
-    if (catalogQuery.isFetching && !hasSnapshotData && !hasDailyClosingData) {
+    if (catalogQuery.isFetching) {
       return {
         label: 'Syncing',
         tone: 'fetching' as const,
@@ -362,15 +348,14 @@ export function AnalyticsPage() {
   }, [
     activeTab,
     catalogDegraded,
+    catalogQuery.isFetching,
     catalogQuery.isLoading,
     dailyClosingDegraded,
-    dailyClosingQuery.isFetching,
     dailyClosingQuery.isLoading,
     hasCatalogData,
     hasDailyClosingData,
     hasSnapshotData,
     snapshotDegraded,
-    snapshotsQuery.isFetching,
     snapshotsQuery.isLoading,
   ])
 

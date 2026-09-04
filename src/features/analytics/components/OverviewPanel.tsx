@@ -104,7 +104,7 @@ function OverviewSnapshotCard({
   useEffect(() => {
     const nextDefaultTradingDate = availableSessionVectorDates[0] ?? null
     if (!nextDefaultTradingDate) {
-      if (selectedSessionVectorDate !== null) {
+      if (selectedSessionVectorDate !== null && selectedSessionVectorDate !== liveSessionVectorTradingDate) {
         setSelectedSessionVectorDate(null)
       }
       return
@@ -115,7 +115,7 @@ function OverviewSnapshotCard({
     }
   }, [availableSessionVectorDates, selectedSessionVectorDate])
 
-  const activeSessionVectorDate = selectedSessionVectorDate ?? availableSessionVectorDates[0] ?? null
+  const activeSessionVectorDate = selectedSessionVectorDate ?? availableSessionVectorDates[0] ?? liveSessionVectorTradingDate ?? null
   const sessionVectorQuery = useSessionVectorDay(
     snapshot.symbol,
     activeSessionVectorDate,

@@ -228,14 +228,19 @@ export function useSessionVectorAvailableDays(symbol: string, tradingDateTo: str
       }
 
       const candidateDates = buildTrailingBusinessDateKeys(tradingDateTo, 5).reverse()
-      const responses = await Promise.all(candidateDates.map((candidateDate) => fetchSessionVectorHead(symbol, candidateDate)))
+      const responses = await Promise.allSettled(candidateDates.map((candidateDate) => fetchSessionVectorHead(symbol, candidateDate)))
       const availableDates: string[] = []
       const manifestsByDate: Record<string, SessionVectorManifest> = {}
 
       for (const response of responses) {
-        const manifest = response.result.manifest
-        const resolvedTradingDate = manifest?.trading_date ?? response.result.trading_date
-        if (!response.result.found || !manifest || !resolvedTradingDate || availableDates.includes(resolvedTradingDate)) {
+        if (response.status !== 'fulfilled') {
+          continue
+        }
+
+        const payload = response.value
+        const manifest = payload.result.manifest
+        const resolvedTradingDate = manifest?.trading_date ?? payload.result.trading_date
+        if (!payload.result.found || !manifest || !resolvedTradingDate || availableDates.includes(resolvedTradingDate)) {
           continue
         }
 

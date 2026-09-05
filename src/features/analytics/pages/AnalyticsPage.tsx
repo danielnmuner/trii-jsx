@@ -17,6 +17,8 @@ import {
 } from '../hooks/useAnalytics'
 import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTimeline'
 import { useOrderPositions } from '../hooks/useOrderPositions'
+import { usePaperworkAuth } from '../../paperwork/auth/usePaperworkAuth'
+import { PaperworkAccessGate } from '../../paperwork/components/PaperworkAccessGate'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
@@ -49,7 +51,7 @@ export function AnalyticsPage() {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
-  const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>('Overview')
+  const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>(() => resolveInitialTopTab())
   const catalogReadySymbols = symbols.length > 0 ? symbols : []
   const orderedCatalogSymbols =
     symbolOrder.length > 0
@@ -100,6 +102,21 @@ export function AnalyticsPage() {
       setSelectedSymbols(symbols)
     }
   }, [selectedSymbols.length, symbols])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const url = new URL(window.location.href)
+    const requestedTab = url.searchParams.get('tab')?.toLowerCase()
+    if (requestedTab !== 'paperwork') {
+      return
+    }
+
+    url.searchParams.delete('tab')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [])
 
   useEffect(() => {
     if (symbols.length === 0) {
@@ -159,6 +176,7 @@ export function AnalyticsPage() {
     [dailyClosingQuery.results, effectiveSelectedSymbols],
   )
   const dailyOrderTimelineQuery = useDailyOrderPositionTimeline(orderedDailyClosingResults, activeTab === 'Historic')
+  const paperworkAuthQuery = usePaperworkAuth(activeTab === 'Paperwork')
 
   const eligibleOverviewSymbolSet = useMemo(
     () => new Set(orderedEligibleOverviewResults.map((result) => result.symbol)),
@@ -446,9 +464,45 @@ export function AnalyticsPage() {
         ) : null}
 
         {activeTab === 'Paperwork' ? (
-          <PaperworkPanel symbols={effectiveSelectedSymbols} />
+          <PaperworkAccessGate
+            session={paperworkAuthQuery.data}
+            isLoading={paperworkAuthQuery.isLoading}
+            errorMessage={resolvePaperworkAuthMessage(paperworkAuthQuery.error)}
+          >
+            <PaperworkPanel symbols={effectiveSelectedSymbols} />
+          </PaperworkAccessGate>
         ) : null}
       </section>
     </main>
   )
+}
+
+function resolvePaperworkAuthMessage(error: unknown) {
+  if (typeof window === 'undefined') {
+    return error ? getErrorMessage(error) : null
+  }
+
+  const authError = new URL(window.location.href).searchParams.get('auth_error')
+  if (authError === 'forbidden') {
+    return 'This GitHub account is not allowed to access Paperwork.'
+  }
+
+  if (authError === 'state') {
+    return 'The GitHub sign-in could not be validated. Please try again.'
+  }
+
+  if (authError === 'github') {
+    return 'GitHub sign-in failed. Please try again.'
+  }
+
+  return error ? getErrorMessage(error) : null
+}
+
+function resolveInitialTopTab(): (typeof topTabs)[number] {
+  if (typeof window === 'undefined') {
+    return 'Overview'
+  }
+
+  const tab = new URL(window.location.href).searchParams.get('tab')?.toLowerCase()
+  return tab === 'paperwork' ? 'Paperwork' : 'Overview'
 }

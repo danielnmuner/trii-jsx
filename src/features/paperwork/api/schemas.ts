@@ -14,22 +14,6 @@ export const stockOrdersPersistResponseSchema = z.object({
   }),
 })
 
-export const invoicePersistResponseSchema = z.object({
-  status: z.literal('ok'),
-  result: z.object({
-    user_name: z.string().optional(),
-    bucket: z.string(),
-    uploaded_files: z.number(),
-    documents: z.array(
-      z.object({
-        archive_name: z.string(),
-        xml_s3_key: z.string(),
-        pdf_s3_key: z.string(),
-      }),
-    ),
-  }),
-})
-
 export const stockOrdersLookupRecordSchema = z.object({
   user_name: z.string().nullable().optional(),
   record_checksum: z.string().optional(),
@@ -67,6 +51,5 @@ export const stockOrdersLookupResponseSchema = z.object({
 })
 
 export type StockOrdersPersistResponse = z.infer<typeof stockOrdersPersistResponseSchema>
-export type InvoicePersistResponse = z.infer<typeof invoicePersistResponseSchema>
 export type StockOrdersLookupResponse = z.infer<typeof stockOrdersLookupResponseSchema>
 export type StockOrdersLookupRecord = z.infer<typeof stockOrdersLookupRecordSchema>

@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { DataTable } from '../../../shared/ui/DataTable'
 import { parseStockOrdersCsv, type StockOrdersUploadResult } from '../lib/stockOrders'
-import { prepareInvoiceArchives, type PreparedInvoiceArchives } from '../lib/invoiceArchives'
-import { submitInvoiceDocuments, submitStockOrders } from '../api/client'
+import { submitStockOrders } from '../api/client'
 import { useOrderTraceability } from '../hooks/useOrderTraceability'
 import type { StockOrdersLookupRecord } from '../api/schemas'
 
@@ -17,12 +16,11 @@ type PaperworkPanelProps = {
 }
 
 type OrderTraceEntry = {
+  id: string
   symbol: string
   createdAt: string | null
   importedAt: string | null
-  recordCount: number
   importLagMs: number | null
-  ageMs: number | null
 }
 
 const BOGOTA_TIMEZONE = 'America/Bogota'
@@ -39,15 +37,6 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
   const [ordersNotice, setOrdersNotice] = useState<NoticeState>(null)
   const [ordersPending, setOrdersPending] = useState(false)
 
-  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([])
-  const [invoiceResult, setInvoiceResult] = useState<PreparedInvoiceArchives | null>(null)
-  const [invoiceNotice, setInvoiceNotice] = useState<NoticeState>(null)
-  const [invoicePending, setInvoicePending] = useState(false)
-
-  const invoicePreviewRows = useMemo(
-    () => invoiceResult?.uploadResult.previewRows ?? [],
-    [invoiceResult],
-  )
   const traceSymbols = useMemo(
     () => symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
     [symbols],
@@ -55,33 +44,27 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
   const selectedUserLabel = PAPERWORK_USERS.find((user) => user.value === selectedUserName)?.label ?? ''
   const traceabilityQuery = useOrderTraceability(traceSymbols, selectedUserName || null)
   const traceEntries = useMemo(() => {
-    const resultMap = new Map(traceabilityQuery.results.map((result) => [result.symbol, result]))
-    const now = Date.now()
-
-    return traceSymbols
-      .map((symbol) => {
-        const result = resultMap.get(symbol)
-        return buildOrderTraceEntry(symbol, result?.latestRecord ?? null, result?.recordCount ?? 0, now)
+    return traceabilityQuery.records
+      .map((record, index) => buildOrderTraceEntry(String(record.symbol ?? '').trim().toUpperCase(), record, index))
+      .filter((entry) => entry.createdAt && entry.importedAt)
+      .sort((left, right) => {
+        const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : Number.NEGATIVE_INFINITY
+        const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : Number.NEGATIVE_INFINITY
+        return rightTime - leftTime
       })
-      .filter((entry) => entry.recordCount > 0 && entry.createdAt && entry.importedAt)
-  }, [traceSymbols, traceabilityQuery.results])
+  }, [traceabilityQuery.records])
   const userRequiredNotice = selectedUserLabel
     ? null
-    : 'Select a user before loading or uploading invoices and orders.'
+    : 'Select a user before loading or uploading orders.'
 
   const ensureUserSelected = () => {
     if (selectedUserName) {
       return true
     }
 
-    const message = 'Select a user before continuing.'
-    setInvoiceNotice({
-      tone: 'info',
-      text: message,
-    })
     setOrdersNotice({
       tone: 'info',
-      text: message,
+      text: 'Select a user before continuing.',
     })
     return false
   }
@@ -143,58 +126,6 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
     })()
   }
 
-  const handleValidateInvoices = (sendRequested: boolean) => {
-    void (async () => {
-      setInvoicePending(true)
-      setInvoiceNotice(null)
-      setInvoiceResult(null)
-
-      if (!ensureUserSelected()) {
-        setInvoicePending(false)
-        return
-      }
-
-      if (invoiceFiles.length === 0) {
-        setInvoiceNotice({
-          tone: 'error',
-          text: 'Upload at least one invoice ZIP file before continuing.',
-        })
-        setInvoicePending(false)
-        return
-      }
-
-      try {
-        const prepared = await prepareInvoiceArchives(invoiceFiles)
-        setInvoiceResult(prepared)
-
-        if (!sendRequested) {
-          setInvoiceNotice({
-            tone: 'success',
-            text: 'The invoice batch passed validation and is ready to upload.',
-          })
-          return
-        }
-
-        const response = await submitInvoiceDocuments({
-          documents: prepared.documents,
-          userName: selectedUserName,
-        })
-
-        setInvoiceNotice({
-          tone: 'success',
-          text: `Upload completed. ${response.result.uploaded_files} source files were persisted to ${response.result.bucket}.`,
-        })
-      } catch (error) {
-        setInvoiceNotice({
-          tone: 'error',
-          text: getErrorMessage(error, 'The invoice batch could not be processed.'),
-        })
-      } finally {
-        setInvoicePending(false)
-      }
-    })()
-  }
-
   return (
     <section className="paperwork-grid" aria-label="Paperwork workspace">
       <div className="paperwork-column paperwork-column--trace">
@@ -217,7 +148,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
               <h3 className="paperwork-card__title">
                 <span>Paperwork owner</span>
               </h3>
-              <p>Select the user before loading invoices or orders into the workflow.</p>
+              <p>Select the user before loading orders into the workflow.</p>
             </div>
           </header>
 
@@ -231,7 +162,6 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
               value={selectedUserName}
               onChange={(event) => {
                 setSelectedUserName(event.target.value)
-                setInvoiceNotice(null)
                 setOrdersNotice(null)
               }}
             >
@@ -246,110 +176,6 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
               <span className="paperwork-userField__hint">{userRequiredNotice}</span>
             ) : null}
           </div>
-        </article>
-
-        <article className="paperwork-card">
-          <header className="paperwork-card__header">
-            <div className="paperwork-card__copy">
-              <span className="paperwork-card__eyebrow">Invoices</span>
-              <h3 className="paperwork-card__title">
-                <img src="/icons/accival.png" alt="Accival" className="paperwork-card__logo paperwork-card__logo--accival" />
-                <span>Invoice archives intake</span>
-              </h3>
-              <p>
-                Inspect each ZIP in-browser, extract the XML and PDF pair, and then upload the
-                normalized document batch to S3 through the API.
-              </p>
-            </div>
-          </header>
-
-          <div className="paperwork-uploader">
-            <label className="paperwork-uploader__dropzone">
-              <span className="paperwork-uploader__label">Invoice ZIP batch</span>
-              <span className="paperwork-uploader__hint">
-                Each ZIP must contain exactly one XML file and one PDF file.
-              </span>
-              <input
-                className="paperwork-uploader__input"
-                type="file"
-                accept=".zip,application/zip"
-                multiple
-                disabled={!selectedUserName}
-                onChange={(event) => {
-                  setInvoiceFiles(Array.from(event.target.files ?? []))
-                  setInvoiceResult(null)
-                  setInvoiceNotice(null)
-                }}
-              />
-              <span className="paperwork-uploader__fileName">
-                {invoiceFiles.length > 0
-                  ? `${invoiceFiles.length} ZIP file${invoiceFiles.length === 1 ? '' : 's'} selected`
-                  : 'Select one or more ZIP files'}
-              </span>
-            </label>
-
-            <div className="paperwork-fileList" aria-label="Selected invoice files">
-              {invoiceFiles.slice(0, 8).map((file) => (
-                <span key={`${file.name}-${file.size}`} className="paperwork-fileList__item">
-                  {file.name}
-                </span>
-              ))}
-            </div>
-
-            <div className="paperwork-actions">
-              <button
-                type="button"
-                className="paperwork-button paperwork-button--secondary"
-                onClick={() => handleValidateInvoices(false)}
-                disabled={invoicePending || !selectedUserName}
-              >
-                {invoicePending ? 'Working...' : 'Validate'}
-              </button>
-              <button
-                type="button"
-                className="paperwork-button paperwork-button--primary"
-                onClick={() => handleValidateInvoices(true)}
-                disabled={invoicePending || !selectedUserName}
-              >
-                {invoicePending ? 'Uploading...' : 'Validate & Upload'}
-              </button>
-            </div>
-          </div>
-
-          {invoiceNotice ? <NoticeBanner notice={invoiceNotice} /> : null}
-
-          {invoiceResult ? (
-            <>
-              <div className="paperwork-metrics">
-                <MetricPill label="ZIP archives" value={String(invoiceResult.uploadResult.archiveCount)} />
-                <MetricPill label="XML files" value={String(invoiceResult.uploadResult.xmlCount)} />
-                <MetricPill label="PDF files" value={String(invoiceResult.uploadResult.pdfCount)} />
-              </div>
-
-              <dl className="paperwork-details">
-                <div>
-                  <dt>Captured at</dt>
-                  <dd>{invoiceResult.uploadResult.capturedAt}</dd>
-                </div>
-                <div>
-                  <dt>Timezone</dt>
-                  <dd>{invoiceResult.uploadResult.timezone}</dd>
-                </div>
-                <div>
-                  <dt>Expected destination</dt>
-                  <dd>S3 / invoices/YYYY/MM/DD/&lt;invoice_id&gt;/file.xml|file.pdf</dd>
-                </div>
-              </dl>
-
-              <section className="paperwork-preview">
-                <div className="paperwork-preview__header">
-                  <h4>Prepared batch</h4>
-                  <p>The XML and PDF paths below are the exact objects that will be uploaded.</p>
-                </div>
-                <DataTable rows={invoicePreviewRows} />
-              </section>
-            </>
-          ) : null}
         </article>
 
         <article className="paperwork-card">
@@ -485,7 +311,7 @@ function OrderTraceabilityPanel(props: {
       <div className="paperwork-trace__header">
         <div className="paperwork-trace__copy">
           <h3 className="paperwork-trace__title">Cloud Trace</h3>
-          <p>Latest approved-order intake seen in AWS for each active symbol.</p>
+          <p>Recent approved-order intake seen in AWS for each active symbol.</p>
         </div>
         <span className={`paperwork-trace__status paperwork-trace__status--${status.toLowerCase()}`}>
           {status}
@@ -501,10 +327,10 @@ function OrderTraceabilityPanel(props: {
       ) : (
         <div className="paperwork-trace__grid">
           {entries.map((entry) => (
-            <article key={entry.symbol} className="paperwork-traceCard">
+            <article key={entry.id} className="paperwork-traceCard">
               <div className="paperwork-traceCard__head">
                 <strong>{entry.symbol}</strong>
-                <span>{entry.recordCount > 0 ? `${entry.recordCount} latest` : 'No trace'}</span>
+                <span>{formatShortBogotaTimestamp(entry.createdAt)}</span>
               </div>
 
               <div className="paperwork-traceCard__metrics">
@@ -512,19 +338,9 @@ function OrderTraceabilityPanel(props: {
                   className="paperwork-traceMetric"
                   title="Elapsed time between the original order creation timestamp and the moment the record was imported into AWS."
                 >
-                  <span>Created → Imported</span>
+                  <span>Created to Imported</span>
                   <strong className={`paperwork-traceMetric__value paperwork-traceMetric__value--${getImportLagTone(entry.importLagMs)}`}>
                     {formatDuration(entry.importLagMs)}
-                  </strong>
-                </div>
-
-                <div
-                  className="paperwork-traceMetric"
-                  title="Elapsed time between the original order creation timestamp and the current Bogota time."
-                >
-                  <span>Created → Now</span>
-                  <strong className={`paperwork-traceMetric__value paperwork-traceMetric__value--${getAgeTone(entry.ageMs)}`}>
-                    {formatDuration(entry.ageMs)}
                   </strong>
                 </div>
               </div>
@@ -548,23 +364,21 @@ function OrderTraceabilityPanel(props: {
 function buildOrderTraceEntry(
   symbol: string,
   record: StockOrdersLookupRecord | null,
-  recordCount: number,
-  now: number,
+  index: number,
 ): OrderTraceEntry {
   const { createdAt } = splitCreatedAtSymbol(record?.created_at_symbol ?? null)
   const importedAt = normalizeTimestamp(record?.imported_at ?? null)
   const createdTime = createdAt ? new Date(createdAt).getTime() : Number.NaN
   const importedTime = importedAt ? new Date(importedAt).getTime() : Number.NaN
+  const recordId = record?.record_checksum?.trim() || record?.created_at_symbol?.trim() || `${symbol}-${index}`
 
   return {
+    id: recordId,
     symbol,
     createdAt,
     importedAt,
-    recordCount,
     importLagMs:
       Number.isFinite(createdTime) && Number.isFinite(importedTime) ? importedTime - createdTime : null,
-    ageMs:
-      Number.isFinite(createdTime) ? Math.max(0, now - createdTime) : null,
   }
 }
 
@@ -650,30 +464,9 @@ function getImportLagTone(value: number | null) {
     return 'muted'
   }
 
-  const minutes = value / 60_000
-  if (minutes <= 15) {
-    return 'good'
-  }
-
-  if (minutes <= 60) {
-    return 'watch'
-  }
-
-  return 'late'
-}
-
-function getAgeTone(value: number | null) {
-  if (value == null || Number.isNaN(value)) {
-    return 'muted'
-  }
-
   const hours = value / 3_600_000
-  if (hours <= 24) {
+  if (hours < 24) {
     return 'good'
-  }
-
-  if (hours <= 72) {
-    return 'watch'
   }
 
   return 'late'

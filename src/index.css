@@ -3389,6 +3389,137 @@ button {
   padding-right: 2px;
 }
 
+.paperwork-auth {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.paperwork-authBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(84, 197, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(10, 14, 18, 0.82);
+}
+
+.paperwork-authBar__identity {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.paperwork-authBar__identity strong,
+.paperwork-authBar__identity span {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.paperwork-authBar__identity strong {
+  color: rgba(244, 246, 248, 0.94);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.paperwork-authBar__identity span {
+  color: rgba(244, 246, 248, 0.52);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.paperwork-authBar__eyebrow {
+  color: rgba(139, 221, 255, 0.9) !important;
+}
+
+.paperwork-authBar__logout,
+.paperwork-authCard__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(84, 197, 255, 0.28);
+  background: rgba(84, 197, 255, 0.1);
+  color: rgba(179, 235, 255, 0.94);
+  text-decoration: none;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.paperwork-authBar__logout:hover,
+.paperwork-authCard__button:hover {
+  border-color: rgba(84, 197, 255, 0.42);
+  background: rgba(84, 197, 255, 0.14);
+}
+
+.paperwork-authCard {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+  padding: 14px;
+  border: 1px solid rgba(84, 197, 255, 0.18);
+  border-radius: 14px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    rgba(10, 13, 17, 0.985);
+  background-size: 18px 18px, 18px 18px, auto;
+  box-shadow: var(--shadow);
+}
+
+.paperwork-authCard__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 7px;
+  border: 1px solid rgba(84, 197, 255, 0.18);
+  background: rgba(84, 197, 255, 0.08);
+  color: rgba(179, 235, 255, 0.94);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.paperwork-authCard__title {
+  margin: 0;
+  color: rgba(244, 246, 248, 0.94);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.paperwork-authCard__copy {
+  margin: 0;
+  color: rgba(244, 246, 248, 0.58);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.paperwork-authCard__notice {
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 115, 128, 0.18);
+  border-radius: 10px;
+  color: rgba(255, 187, 193, 0.94);
+  background: rgba(255, 115, 128, 0.06);
+  font-size: 0.69rem;
+  line-height: 1.5;
+}
+
 .paperwork-column {
   min-width: 0;
   display: grid;
@@ -3469,11 +3600,6 @@ button {
 }
 
 .paperwork-card__logo--trii {
-  width: 18px;
-  height: 18px;
-}
-
-.paperwork-card__logo--accival {
   width: 18px;
   height: 18px;
 }

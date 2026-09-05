@@ -26,12 +26,16 @@ export function getGitHubAuthConfig() {
   }
 }
 
-export function buildAuthorizeUrl({ clientId, redirectUri, state }) {
+export function buildAuthorizeUrl({ clientId, redirectUri, state, prompt }) {
   const url = new URL(GITHUB_AUTHORIZE_URL)
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', redirectUri)
   url.searchParams.set('scope', 'read:user user:email')
   url.searchParams.set('state', state)
+  url.searchParams.set('allow_signup', 'false')
+  if (prompt) {
+    url.searchParams.set('prompt', prompt)
+  }
   return url.toString()
 }
 

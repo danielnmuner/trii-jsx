@@ -16,6 +16,7 @@ export default function handler(req, res) {
     const origin = getRequestOrigin(req)
     const requestUrl = new URL(req.url || '/api/auth/github/login', origin)
     const returnTo = sanitizeReturnTo(requestUrl.searchParams.get('return_to'))
+    const prompt = requestUrl.searchParams.get('prompt') === 'select_account' ? 'select_account' : undefined
     const signedState = createStateCookieValue(returnTo, sessionSecret)
     const [statePayload] = signedState.split('.')
     setStateCookie(res, encodeURIComponent(signedState))
@@ -25,6 +26,7 @@ export default function handler(req, res) {
         clientId,
         redirectUri,
         state: statePayload ? JSON.parse(Buffer.from(statePayload, 'base64url').toString('utf8')).state : '',
+        prompt,
       }),
     )
   } catch (error) {

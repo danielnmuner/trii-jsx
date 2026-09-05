@@ -23,9 +23,9 @@ export async function fetchPaperworkSession() {
 }
 
 export function buildPaperworkLoginUrl() {
-  return '/api/auth/github/login?return_to=%2F%3Ftab%3Dpaperwork'
+  return '/api/auth/github/login?return_to=%2F%3Ftab%3Dpaperwork&prompt=select_account'
 }
 
 export function buildPaperworkLogoutUrl() {
-  return '/api/auth/logout?return_to=%2F%3Ftab%3Dpaperwork'
+  return '/api/auth/logout?return_to=%2Fapi%2Fauth%2Fgithub%2Flogin%3Freturn_to%3D%252F%253Ftab%253Dpaperwork%2526prompt%253Dselect_account'
 }

@@ -26,9 +26,14 @@ type OrderTraceEntry = {
 }
 
 const BOGOTA_TIMEZONE = 'America/Bogota'
+const PAPERWORK_USERS = [
+  { label: 'Olaty', value: 'olaty' },
+  { label: 'Leinda', value: 'leinda' },
+] as const
 
 export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
   const queryClient = useQueryClient()
+  const [selectedUserName, setSelectedUserName] = useState<string>('')
   const [ordersFile, setOrdersFile] = useState<File | null>(null)
   const [ordersResult, setOrdersResult] = useState<StockOrdersUploadResult | null>(null)
   const [ordersNotice, setOrdersNotice] = useState<NoticeState>(null)
@@ -47,7 +52,8 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
     () => symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
     [symbols],
   )
-  const traceabilityQuery = useOrderTraceability(traceSymbols)
+  const selectedUserLabel = PAPERWORK_USERS.find((user) => user.value === selectedUserName)?.label ?? ''
+  const traceabilityQuery = useOrderTraceability(traceSymbols, selectedUserName || null)
   const traceEntries = useMemo(() => {
     const resultMap = new Map(traceabilityQuery.results.map((result) => [result.symbol, result]))
     const now = Date.now()
@@ -59,12 +65,37 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
       })
       .filter((entry) => entry.recordCount > 0 && entry.createdAt && entry.importedAt)
   }, [traceSymbols, traceabilityQuery.results])
+  const userRequiredNotice = selectedUserLabel
+    ? null
+    : 'Select a user before loading or uploading invoices and orders.'
+
+  const ensureUserSelected = () => {
+    if (selectedUserName) {
+      return true
+    }
+
+    const message = 'Select a user before continuing.'
+    setInvoiceNotice({
+      tone: 'info',
+      text: message,
+    })
+    setOrdersNotice({
+      tone: 'info',
+      text: message,
+    })
+    return false
+  }
 
   const handleValidateOrders = (sendRequested: boolean) => {
     void (async () => {
       setOrdersPending(true)
       setOrdersNotice(null)
       setOrdersResult(null)
+
+      if (!ensureUserSelected()) {
+        setOrdersPending(false)
+        return
+      }
 
       if (!ordersFile) {
         setOrdersNotice({
@@ -91,6 +122,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
           fileName: ordersFile.name,
           records: result.records,
           sourceFileChecksum: result.sourceFileChecksum,
+          userName: selectedUserName,
         })
 
         setOrdersNotice({
@@ -117,6 +149,11 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
       setInvoiceNotice(null)
       setInvoiceResult(null)
 
+      if (!ensureUserSelected()) {
+        setInvoicePending(false)
+        return
+      }
+
       if (invoiceFiles.length === 0) {
         setInvoiceNotice({
           tone: 'error',
@@ -140,6 +177,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
 
         const response = await submitInvoiceDocuments({
           documents: prepared.documents,
+          userName: selectedUserName,
         })
 
         setInvoiceNotice({
@@ -166,11 +204,50 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
             isLoading={traceabilityQuery.isLoading}
             isFetching={traceabilityQuery.isFetching}
             isError={traceabilityQuery.isError}
+            hasUserSelected={Boolean(selectedUserName)}
           />
         </article>
       </div>
 
       <div className="paperwork-column paperwork-column--intake">
+        <article className="paperwork-card">
+          <header className="paperwork-card__header">
+            <div className="paperwork-card__copy">
+              <span className="paperwork-card__eyebrow">User</span>
+              <h3 className="paperwork-card__title">
+                <span>Paperwork owner</span>
+              </h3>
+              <p>Select the user before loading invoices or orders into the workflow.</p>
+            </div>
+          </header>
+
+          <div className="paperwork-userField">
+            <label className="paperwork-userField__label" htmlFor="paperwork-user-name">
+              User name
+            </label>
+            <select
+              id="paperwork-user-name"
+              className="paperwork-userField__select"
+              value={selectedUserName}
+              onChange={(event) => {
+                setSelectedUserName(event.target.value)
+                setInvoiceNotice(null)
+                setOrdersNotice(null)
+              }}
+            >
+              <option value="">Select user</option>
+              {PAPERWORK_USERS.map((user) => (
+                <option key={user.value} value={user.value}>
+                  {user.label}
+                </option>
+              ))}
+            </select>
+            {userRequiredNotice ? (
+              <span className="paperwork-userField__hint">{userRequiredNotice}</span>
+            ) : null}
+          </div>
+        </article>
+
         <article className="paperwork-card">
           <header className="paperwork-card__header">
             <div className="paperwork-card__copy">
@@ -197,6 +274,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
                 type="file"
                 accept=".zip,application/zip"
                 multiple
+                disabled={!selectedUserName}
                 onChange={(event) => {
                   setInvoiceFiles(Array.from(event.target.files ?? []))
                   setInvoiceResult(null)
@@ -223,7 +301,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
                 type="button"
                 className="paperwork-button paperwork-button--secondary"
                 onClick={() => handleValidateInvoices(false)}
-                disabled={invoicePending}
+                disabled={invoicePending || !selectedUserName}
               >
                 {invoicePending ? 'Working...' : 'Validate'}
               </button>
@@ -231,7 +309,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
                 type="button"
                 className="paperwork-button paperwork-button--primary"
                 onClick={() => handleValidateInvoices(true)}
-                disabled={invoicePending}
+                disabled={invoicePending || !selectedUserName}
               >
                 {invoicePending ? 'Uploading...' : 'Validate & Upload'}
               </button>
@@ -299,6 +377,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
                 className="paperwork-uploader__input"
                 type="file"
                 accept=".csv,text/csv"
+                disabled={!selectedUserName}
                 onChange={(event) => {
                   setOrdersFile(event.target.files?.[0] ?? null)
                   setOrdersResult(null)
@@ -315,7 +394,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
                 type="button"
                 className="paperwork-button paperwork-button--secondary"
                 onClick={() => handleValidateOrders(false)}
-                disabled={ordersPending}
+                disabled={ordersPending || !selectedUserName}
               >
                 {ordersPending ? 'Working...' : 'Validate'}
               </button>
@@ -323,7 +402,7 @@ export function PaperworkPanel({ symbols }: PaperworkPanelProps) {
                 type="button"
                 className="paperwork-button paperwork-button--primary"
                 onClick={() => handleValidateOrders(true)}
-                disabled={ordersPending}
+                disabled={ordersPending || !selectedUserName}
               >
                 {ordersPending ? 'Uploading...' : 'Validate & Upload'}
               </button>
@@ -396,8 +475,9 @@ function OrderTraceabilityPanel(props: {
   isLoading: boolean
   isFetching: boolean
   isError: boolean
+  hasUserSelected: boolean
 }) {
-  const { entries, isLoading, isFetching, isError } = props
+  const { entries, isLoading, isFetching, isError, hasUserSelected } = props
   const status = isError ? 'Degraded' : isLoading ? 'Loading' : isFetching ? 'Syncing' : 'Live'
 
   return (
@@ -414,7 +494,9 @@ function OrderTraceabilityPanel(props: {
 
       {entries.length === 0 ? (
         <div className="paperwork-trace__empty">
-          Select at least one symbol in the core strip to inspect order upload latency.
+          {hasUserSelected
+            ? 'Select at least one symbol in the core strip to inspect order upload latency.'
+            : 'Select a user first to inspect order upload latency.'}
         </div>
       ) : (
         <div className="paperwork-trace__grid">

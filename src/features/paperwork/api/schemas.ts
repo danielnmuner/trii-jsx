@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const stockOrdersPersistResponseSchema = z.object({
   status: z.literal('ok'),
   result: z.object({
+    user_name: z.string().optional(),
     table: z.string(),
     file_name: z.string(),
     source_file_checksum: z.string(),
@@ -16,6 +17,7 @@ export const stockOrdersPersistResponseSchema = z.object({
 export const invoicePersistResponseSchema = z.object({
   status: z.literal('ok'),
   result: z.object({
+    user_name: z.string().optional(),
     bucket: z.string(),
     uploaded_files: z.number(),
     documents: z.array(
@@ -29,6 +31,7 @@ export const invoicePersistResponseSchema = z.object({
 })
 
 export const stockOrdersLookupRecordSchema = z.object({
+  user_name: z.string().nullable().optional(),
   record_checksum: z.string().optional(),
   source_file_checksum: z.string().optional(),
   source_line_number: z.number().nullable().optional(),
@@ -54,6 +57,7 @@ export const stockOrdersLookupResponseSchema = z.object({
   status: z.literal('ok'),
   result: z.object({
     lookup_mode: z.enum(['symbol', 'record_checksum', 'created_month']),
+    user_name: z.string().optional(),
     symbol: z.string().optional(),
     record_checksum: z.string().optional(),
     created_month: z.string().optional(),

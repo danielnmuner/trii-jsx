@@ -256,33 +256,34 @@ function buildSessionVectorChart(
   const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
   const innerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
   const firstIndex = visiblePoints[0]?.index ?? 0
-  const lastPosition = Math.max(visiblePoints.length - 1, 0)
-
-  const pointOrderByIndex = new Map<number, number>()
-  visiblePoints.forEach((point, order) => {
-    pointOrderByIndex.set(point.index, order)
-  })
+  const lastIndex =
+    typeof dataset?.manifest?.latest_sample_index === 'number'
+      ? dataset.manifest.latest_sample_index
+      : visiblePoints.at(-1)?.index ?? firstIndex
+  const indexDomain = Math.max(lastIndex - firstIndex, 1)
 
   const scaleX = (pointIndex: number) => {
-    const order = pointOrderByIndex.get(pointIndex) ?? 0
-    return CHART_PADDING.left + (lastPosition <= 0 ? 0 : (order / lastPosition) * innerWidth)
+    const clampedIndex = Math.min(Math.max(pointIndex, firstIndex), lastIndex)
+    return CHART_PADDING.left + ((clampedIndex - firstIndex) / indexDomain) * innerWidth
   }
   const scaleY = (value: number) =>
     CHART_PADDING.top + innerHeight - ((value - minValue) / domain) * innerHeight
 
   const guides = buildGuides(scaleY, guideLowValue, guideHighValue)
-  const interactivePoints = visiblePoints.map((point) => ({
-    ...point,
-    x: scaleX(point.index),
-    lastY: typeof point.lastPrice === 'number' ? scaleY(point.lastPrice) : null,
-    midY: typeof point.midPrice === 'number' ? scaleY(point.midPrice) : null,
-    vwapY: typeof point.vwap === 'number' ? scaleY(point.vwap) : null,
-  }))
+  const interactivePoints = visiblePoints
+    .filter(hasSessionVectorRenderableValue)
+    .map((point) => ({
+      ...point,
+      x: scaleX(point.index),
+      lastY: typeof point.lastPrice === 'number' ? scaleY(point.lastPrice) : null,
+      midY: typeof point.midPrice === 'number' ? scaleY(point.midPrice) : null,
+      vwapY: typeof point.vwap === 'number' ? scaleY(point.vwap) : null,
+    }))
 
   return {
     points: visiblePoints,
     interactivePoints,
-    pointCount: visiblePoints.length,
+    pointCount: lastIndex - firstIndex + 1,
     lastPath: buildLinePath(visiblePoints, scaleX, scaleY, (point) => point.lastPrice),
     midPath: buildLinePath(visiblePoints, scaleX, scaleY, (point) => point.midPrice),
     vwapPath: buildLinePath(visiblePoints, scaleX, scaleY, (point) => point.vwap),
@@ -474,21 +475,27 @@ function buildLinePath(
   accessor: (point: SessionVectorPoint) => number | null,
 ) {
   let currentPath = ''
-  let needsMove = true
 
   for (const point of points) {
     const value = accessor(point)
     if (value === null) {
-      needsMove = true
       continue
     }
 
-    const command = needsMove || currentPath.length === 0 ? 'M' : 'L'
+    const command = currentPath.length === 0 ? 'M' : 'L'
     currentPath += `${command}${scaleX(point.index).toFixed(2)} ${scaleY(value).toFixed(2)} `
-    needsMove = false
   }
 
   return currentPath.trim()
+}
+
+function hasSessionVectorRenderableValue(point: SessionVectorPoint) {
+  return (
+    typeof point.lastPrice === 'number' ||
+    typeof point.midPrice === 'number' ||
+    typeof point.vwap === 'number' ||
+    typeof point.microPrice === 'number'
+  )
 }
 
 function findLatest(points: SessionVectorPoint[], key: keyof Omit<SessionVectorPoint, 'index'>) {

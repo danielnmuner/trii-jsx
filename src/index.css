@@ -3668,6 +3668,43 @@ button {
   gap: 10px;
 }
 
+.paperwork-userField {
+  display: grid;
+  gap: 7px;
+}
+
+.paperwork-userField__label {
+  color: rgba(244, 246, 248, 0.9);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.paperwork-userField__select {
+  min-height: 36px;
+  border-radius: 11px;
+  border: 1px solid rgba(84, 197, 255, 0.22);
+  background: rgba(9, 13, 18, 0.96);
+  color: rgba(244, 246, 248, 0.92);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  padding: 0 11px;
+  outline: none;
+}
+
+.paperwork-userField__select:focus {
+  border-color: rgba(84, 197, 255, 0.42);
+  box-shadow: 0 0 0 1px rgba(84, 197, 255, 0.18);
+}
+
+.paperwork-userField__hint {
+  color: rgba(255, 196, 142, 0.88);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
 .paperwork-uploader__dropzone {
   min-width: 0;
   display: grid;
@@ -3681,6 +3718,11 @@ button {
     rgba(255, 255, 255, 0.012);
   background-size: 12px 12px, 12px 12px, auto;
   cursor: pointer;
+}
+
+.paperwork-uploader__dropzone:has(.paperwork-uploader__input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .paperwork-uploader__label {

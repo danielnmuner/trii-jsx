@@ -3,19 +3,19 @@ import { useQueries } from '@tanstack/react-query'
 import { fetchStockOrdersBySymbol } from '../api/client'
 import { ANALYTICS_REALTIME_REFETCH_MS } from '../../analytics/config'
 
-export function useOrderTraceability(symbols: string[]) {
+export function useOrderTraceability(symbols: string[], userName: string | null) {
   const queries = useQueries({
     queries: symbols.map((symbol) => ({
-      queryKey: ['paperwork', 'orders-trace', symbol],
+      queryKey: ['paperwork', 'orders-trace', userName, symbol],
       queryFn: async () => {
-        const response = await fetchStockOrdersBySymbol(symbol, 1)
+        const response = await fetchStockOrdersBySymbol(symbol, 1, userName ?? undefined)
         return {
           symbol,
           latestRecord: response.result.records[0] ?? null,
           recordCount: response.result.record_count,
         }
       },
-      enabled: Boolean(symbol),
+      enabled: Boolean(symbol && userName),
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
     })),

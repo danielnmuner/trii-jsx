@@ -118,7 +118,7 @@ export function assertGitHubUserAllowed(identity) {
   const allowedEmails = parseCsvEnv(process.env.PAPERWORK_GITHUB_ALLOWED_EMAILS)
 
   if (allowedLogins.size === 0 && allowedEmails.size === 0) {
-    throw new Error('Missing Paperwork GitHub allowlist configuration.')
+    return
   }
 
   const normalizedLogin = identity.login.trim().toLowerCase()

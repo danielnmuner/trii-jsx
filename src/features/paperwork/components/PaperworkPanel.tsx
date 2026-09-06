@@ -102,7 +102,7 @@ export function PaperworkPanel({ authenticatedUserEmail }: PaperworkPanelProps) 
       <div className="paperwork-column paperwork-column--intake">
         <PaperworkAnalyticsPanel authenticatedUserEmail={authenticatedUserEmail} />
 
-        <article className="paperwork-card">
+        <article className="paperwork-card paperwork-card--intake">
           <header className="paperwork-card__header">
             <div className="paperwork-card__copy">
               <span className="paperwork-card__eyebrow">Orders</span>

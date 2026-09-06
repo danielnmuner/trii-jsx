@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
+import { fetchDailyClosingSnapshots } from '../../analytics/api/client'
 import { fetchInvoicesByIssuedMonth, fetchStockOrdersByCreatedMonth, fetchStockOrdersBySymbol } from '../api/client'
 import type { StockOrdersLookupRecord } from '../api/schemas'
-import { buildPaperworkAnalytics, inferInvoiceSymbol } from '../lib/analytics'
+import { buildPaperworkAnalytics } from '../lib/analytics'
 
 const PAPERWORK_ANALYTICS_STALE_MS = 60_000
 
@@ -55,21 +56,28 @@ export function usePaperworkAnalytics(userEmail: string | null, periodMonths: nu
   )
 
   const trackedSymbols = useMemo(() => {
-    const orderSymbols = ordersMonthRecords
+    const symbols = ordersMonthRecords
       .map((record) => String(record.symbol ?? '').trim().toUpperCase())
       .filter(Boolean)
 
-    const invoiceSymbols = invoicesMonthRecords
-      .map((record) => inferInvoiceSymbol(record))
-      .filter((symbol): symbol is string => Boolean(symbol))
-
-    return Array.from(new Set([...orderSymbols, ...invoiceSymbols])).sort((left, right) => left.localeCompare(right))
-  }, [invoicesMonthRecords, ordersMonthRecords])
+    return Array.from(new Set(symbols)).sort((left, right) => left.localeCompare(right))
+  }, [ordersMonthRecords])
 
   const symbolHistoryQueries = useQueries({
     queries: trackedSymbols.map((symbol) => ({
       queryKey: ['paperwork', 'orders', 'symbol', userEmail, symbol],
       queryFn: () => fetchStockOrdersBySymbol(symbol, 500, userEmail ?? undefined),
+      enabled: Boolean(userEmail),
+      staleTime: PAPERWORK_ANALYTICS_STALE_MS,
+      gcTime: PAPERWORK_ANALYTICS_STALE_MS * 5,
+      refetchOnWindowFocus: false,
+    })),
+  })
+
+  const dailyClosingQueries = useQueries({
+    queries: trackedSymbols.map((symbol) => ({
+      queryKey: ['paperwork', 'daily-closing', symbol],
+      queryFn: () => fetchDailyClosingSnapshots(symbol, 1),
       enabled: Boolean(userEmail),
       staleTime: PAPERWORK_ANALYTICS_STALE_MS,
       gcTime: PAPERWORK_ANALYTICS_STALE_MS * 5,
@@ -83,10 +91,17 @@ export function usePaperworkAnalytics(userEmail: string | null, periodMonths: nu
       return accumulator
     }, {})
 
+    const latestClosingPriceBySymbol = trackedSymbols.reduce<Record<string, number | null>>((accumulator, symbol, index) => {
+      const latestRecord = dailyClosingQueries[index]?.data?.result.records?.[0]
+      accumulator[symbol] = typeof latestRecord?.last_price === 'number' ? latestRecord.last_price : null
+      return accumulator
+    }, {})
+
     const model = buildPaperworkAnalytics({
       ordersMonthRecords,
       invoicesMonthRecords,
       symbolOrderHistoryBySymbol,
+      latestClosingPriceBySymbol,
     })
 
     return {
@@ -95,22 +110,26 @@ export function usePaperworkAnalytics(userEmail: string | null, periodMonths: nu
       isLoading:
         ordersMonthQueries.some((query) => query.isLoading) ||
         invoicesMonthQueries.some((query) => query.isLoading) ||
-        symbolHistoryQueries.some((query) => query.isLoading),
+        symbolHistoryQueries.some((query) => query.isLoading) ||
+        dailyClosingQueries.some((query) => query.isLoading),
       isFetching:
         ordersMonthQueries.some((query) => query.isFetching) ||
         invoicesMonthQueries.some((query) => query.isFetching) ||
-        symbolHistoryQueries.some((query) => query.isFetching),
+        symbolHistoryQueries.some((query) => query.isFetching) ||
+        dailyClosingQueries.some((query) => query.isFetching),
       isError:
         ordersMonthQueries.some((query) => query.isError) ||
         invoicesMonthQueries.some((query) => query.isError) ||
-        symbolHistoryQueries.some((query) => query.isError),
+        symbolHistoryQueries.some((query) => query.isError) ||
+        dailyClosingQueries.some((query) => query.isError),
       error:
         ordersMonthQueries.find((query) => query.error)?.error ??
         invoicesMonthQueries.find((query) => query.error)?.error ??
         symbolHistoryQueries.find((query) => query.error)?.error ??
+        dailyClosingQueries.find((query) => query.error)?.error ??
         null,
     }
-  }, [coveredMonths, invoicesMonthQueries, invoicesMonthRecords, ordersMonthQueries, ordersMonthRecords, symbolHistoryQueries, trackedSymbols])
+  }, [coveredMonths, dailyClosingQueries, invoicesMonthQueries, invoicesMonthRecords, ordersMonthQueries, ordersMonthRecords, symbolHistoryQueries, trackedSymbols])
 }
 
 export function getPaperworkPeriodOptions() {

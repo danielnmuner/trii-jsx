@@ -26,6 +26,7 @@ import { rankCoreSymbols, resolveAvailableQuantity, resolveOwnedInvestmentValue,
 import { deriveFreshnessTone } from '../lib/freshness'
 
 const topTabs = ['Overview', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
+const visibleTopTabs = topTabs.filter((tab) => tab !== 'Benchmark Stats' && tab !== 'User Guide')
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
 
 function getErrorMessage(error: unknown, fallback = 'Unknown error') {
@@ -407,9 +408,9 @@ export function AnalyticsPage() {
         />
       ) : null}
 
-      <Tabs items={topTabs} active={activeTab} onChange={setActiveTab} />
+      <Tabs items={visibleTopTabs} active={activeTab} onChange={setActiveTab} />
 
-      <section className="analytics-stage">
+      <section className={`analytics-stage${activeTab === 'Paperwork' ? ' analytics-stage--scroll' : ''}`}>
         {activeTab === 'Overview' ? (
           !hasSnapshotData && snapshotsQuery.isError ? (
             <StatusState

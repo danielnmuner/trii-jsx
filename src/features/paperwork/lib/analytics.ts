@@ -1,6 +1,7 @@
-import { summarizeDailyOrderPositionTimeline } from '../../analytics/lib/orderPosition'
 import type { StockOrdersLookupRecord, ParsedInvoiceLookupRecord } from '../api/schemas'
 import { invoiceSymbolAliasMap } from './invoiceSymbolMap'
+
+const TRII_PRO_COMMISSION_RATE = 0.00125
 
 export type InvoiceDocumentRow = {
   invoiceNumber: string
@@ -9,8 +10,10 @@ export type InvoiceDocumentRow = {
   orderReferenceId: string | null
   side: 'buy' | 'sell' | 'unknown'
   symbol: string | null
+  baseAmount: number
   payableAmount: number
   taxAmount: number
+  totalAmount: number
   description: string | null
 }
 
@@ -22,10 +25,24 @@ export type PaperworkAnalyticsRow = {
   sellCount: number
   boughtQuantity: number
   soldQuantity: number
+  tradedGrossAmount: number
   orderCommission: number
-  invoiceFees: number
+  calculatedCommission: number
+  invoiceBaseAmount: number
+  invoiceTaxAmount: number
+  invoiceTotalAmount: number
   feeGap: number
-  realizedNet: number
+  openQuantity: number
+  averageCost: number | null
+  closePrice: number | null
+  mtmPnl: number | null
+}
+
+export type PaperworkAnomalyRow = {
+  scope: string
+  severity: 'high' | 'medium' | 'low'
+  signal: string
+  detail: string
 }
 
 export type PaperworkAnalyticsSummary = {
@@ -37,15 +54,21 @@ export type PaperworkAnalyticsSummary = {
   sellCount: number
   boughtQuantity: number
   soldQuantity: number
+  tradedGrossAmount: number
   orderCommission: number
-  invoiceFees: number
+  calculatedCommission: number
+  invoiceBaseAmount: number
+  invoiceTaxAmount: number
+  invoiceTotalAmount: number
   feeGap: number
-  realizedNet: number
+  openQuantity: number
+  mtmPnl: number
 }
 
 export type PaperworkAnalyticsModel = {
   summary: PaperworkAnalyticsSummary
   rows: PaperworkAnalyticsRow[]
+  anomalies: PaperworkAnomalyRow[]
   invoiceRows: InvoiceDocumentRow[]
   unmappedInvoices: InvoiceDocumentRow[]
 }
@@ -54,11 +77,10 @@ type BuildPaperworkAnalyticsInput = {
   ordersMonthRecords: StockOrdersLookupRecord[]
   invoicesMonthRecords: ParsedInvoiceLookupRecord[]
   symbolOrderHistoryBySymbol: Record<string, StockOrdersLookupRecord[]>
+  latestClosingPriceBySymbol: Record<string, number | null>
 }
 
-type AggregatedSymbolRow = PaperworkAnalyticsRow & {
-  tradingDates: Set<string>
-}
+type AggregatedSymbolRow = PaperworkAnalyticsRow
 
 export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): PaperworkAnalyticsModel {
   const approvedOrders = input.ordersMonthRecords
@@ -85,11 +107,17 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
       sellCount: 0,
       boughtQuantity: 0,
       soldQuantity: 0,
+      tradedGrossAmount: 0,
       orderCommission: 0,
-      invoiceFees: 0,
+      calculatedCommission: 0,
+      invoiceBaseAmount: 0,
+      invoiceTaxAmount: 0,
+      invoiceTotalAmount: 0,
       feeGap: 0,
-      realizedNet: 0,
-      tradingDates: new Set<string>(),
+      openQuantity: 0,
+      averageCost: null,
+      closePrice: null,
+      mtmPnl: null,
     }
     rowsBySymbol.set(normalizedSymbol, created)
     return created
@@ -104,14 +132,12 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
     const row = ensureRow(symbol)
     const quantity = normalizeNumber(record.filled_quantity)
     const commission = normalizeNumber(record.commission_amount)
+    const grossAmount = Math.abs(normalizeNumber(record.gross_amount))
     const side = normalizeSide(record.order_side)
     row.orderCount += 1
     row.orderCommission += commission
-
-    const tradingDate = resolveOrderDateKey(record)
-    if (tradingDate) {
-      row.tradingDates.add(tradingDate)
-    }
+    row.tradedGrossAmount += grossAmount
+    row.calculatedCommission += grossAmount * TRII_PRO_COMMISSION_RATE
 
     if (side === 'buy') {
       row.buyCount += 1
@@ -129,35 +155,39 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
 
     const row = ensureRow(invoice.symbol)
     row.invoiceCount += 1
-    row.invoiceFees += invoice.payableAmount
+    row.invoiceBaseAmount += invoice.baseAmount
+    row.invoiceTaxAmount += invoice.taxAmount
+    row.invoiceTotalAmount += invoice.totalAmount
+    row.feeGap = row.invoiceTotalAmount - row.orderCommission
   }
 
-  for (const row of rowsBySymbol.values()) {
-    row.feeGap = row.invoiceFees - row.orderCommission
-    const history = input.symbolOrderHistoryBySymbol[row.symbol] ?? []
-    if (history.length === 0 || row.tradingDates.size === 0) {
-      continue
+  for (const [symbol, row] of rowsBySymbol.entries()) {
+    const position = summarizeOpenPosition(
+      symbol,
+      input.symbolOrderHistoryBySymbol[symbol] ?? [],
+      input.latestClosingPriceBySymbol[symbol] ?? null,
+    )
+    row.openQuantity = position.openQuantity
+    row.averageCost = position.averageCost
+    row.closePrice = position.closePrice
+    row.mtmPnl = position.mtmPnl
+  }
+
+  const rows = Array.from(rowsBySymbol.values()).sort((left, right) => {
+    const mtmDelta = Math.abs(right.mtmPnl ?? 0) - Math.abs(left.mtmPnl ?? 0)
+    if (mtmDelta !== 0) {
+      return mtmDelta
     }
 
-    const checkpoints = Array.from(row.tradingDates)
-      .sort((left, right) => left.localeCompare(right))
-      .map((tradingDate) => ({ tradingDate, lastPrice: null }))
-    const timeline = summarizeDailyOrderPositionTimeline(row.symbol, history, checkpoints)
-    row.realizedNet = checkpoints.reduce((sum, checkpoint) => {
-      return sum + normalizeNumber(timeline[checkpoint.tradingDate]?.totalNetProfit)
-    }, 0)
-  }
+    const feeDelta = Math.abs(right.feeGap) - Math.abs(left.feeGap)
+    if (feeDelta !== 0) {
+      return feeDelta
+    }
 
-  const rows = Array.from(rowsBySymbol.values())
-    .map(({ tradingDates: _tradingDates, ...row }) => row)
-    .sort((left, right) => {
-      const invoiceDelta = right.invoiceFees - left.invoiceFees
-      if (invoiceDelta !== 0) {
-        return invoiceDelta
-      }
+    return left.symbol.localeCompare(right.symbol)
+  })
 
-      return left.symbol.localeCompare(right.symbol)
-    })
+  const anomalies = buildAnomalies(rows, invoiceRows)
 
   const summary: PaperworkAnalyticsSummary = rows.reduce(
     (accumulator, row) => {
@@ -166,10 +196,15 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
       accumulator.sellCount += row.sellCount
       accumulator.boughtQuantity += row.boughtQuantity
       accumulator.soldQuantity += row.soldQuantity
+      accumulator.tradedGrossAmount += row.tradedGrossAmount
       accumulator.orderCommission += row.orderCommission
-      accumulator.invoiceFees += row.invoiceFees
+      accumulator.calculatedCommission += row.calculatedCommission
+      accumulator.invoiceBaseAmount += row.invoiceBaseAmount
+      accumulator.invoiceTaxAmount += row.invoiceTaxAmount
+      accumulator.invoiceTotalAmount += row.invoiceTotalAmount
       accumulator.feeGap += row.feeGap
-      accumulator.realizedNet += row.realizedNet
+      accumulator.openQuantity += row.openQuantity
+      accumulator.mtmPnl += row.mtmPnl ?? 0
       return accumulator
     },
     {
@@ -181,16 +216,22 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
       sellCount: 0,
       boughtQuantity: 0,
       soldQuantity: 0,
+      tradedGrossAmount: 0,
       orderCommission: 0,
-      invoiceFees: 0,
+      calculatedCommission: 0,
+      invoiceBaseAmount: 0,
+      invoiceTaxAmount: 0,
+      invoiceTotalAmount: 0,
       feeGap: 0,
-      realizedNet: 0,
+      openQuantity: 0,
+      mtmPnl: 0,
     },
   )
 
   return {
     summary,
     rows,
+    anomalies,
     invoiceRows,
     unmappedInvoices: invoiceRows.filter((row) => !row.symbol),
   }
@@ -225,8 +266,132 @@ export function inferInvoiceSymbol(
   return null
 }
 
+function summarizeOpenPosition(symbol: string, records: StockOrdersLookupRecord[], closePrice: number | null) {
+  const normalizedSymbol = symbol.trim().toUpperCase()
+  const approvedRecords = [...records]
+    .filter((record) => (record.symbol ?? normalizedSymbol).trim().toUpperCase() === normalizedSymbol)
+    .filter((record) => normalizeStatus(record.normalized_status) === 'approved')
+    .sort((left, right) => resolveOrderTimestamp(left) - resolveOrderTimestamp(right))
+
+  const lots: Array<{ quantity: number; unitPrice: number; remainingCommission: number }> = []
+
+  for (const record of approvedRecords) {
+    const quantity = normalizeNumber(record.filled_quantity)
+    const price = normalizeNumber(record.price_per_share)
+    const commission = normalizeNumber(record.commission_amount)
+    const side = normalizeSide(record.order_side)
+
+    if (!quantity || !price || !side) {
+      continue
+    }
+
+    if (side === 'buy') {
+      lots.push({
+        quantity,
+        unitPrice: price,
+        remainingCommission: commission,
+      })
+      continue
+    }
+
+    let remaining = quantity
+    while (remaining > 0 && lots.length > 0) {
+      const head = lots[0]
+      const startingQuantity = head.quantity
+      const consumedQuantity = Math.min(head.quantity, remaining)
+      const consumedCommission =
+        startingQuantity > 0 ? (head.remainingCommission * consumedQuantity) / startingQuantity : 0
+      head.remainingCommission = Math.max(0, head.remainingCommission - consumedCommission)
+
+      if (head.quantity <= remaining) {
+        remaining -= head.quantity
+        lots.shift()
+        continue
+      }
+
+      head.quantity -= remaining
+      remaining = 0
+    }
+  }
+
+  const openQuantity = lots.reduce((sum, lot) => sum + lot.quantity, 0)
+  const costBasis = lots.reduce((sum, lot) => sum + lot.quantity * lot.unitPrice, 0)
+  const remainingCommission = lots.reduce((sum, lot) => sum + lot.remainingCommission, 0)
+  const averageCost = openQuantity > 0 ? costBasis / openQuantity : null
+  const mtmPnl =
+    openQuantity > 0 && closePrice !== null
+      ? closePrice * openQuantity - costBasis - remainingCommission
+      : null
+
+  return {
+    openQuantity,
+    averageCost,
+    closePrice,
+    mtmPnl,
+  }
+}
+
+function buildAnomalies(rows: PaperworkAnalyticsRow[], invoiceRows: InvoiceDocumentRow[]) {
+  const anomalies: PaperworkAnomalyRow[] = []
+
+  for (const row of rows) {
+    if (row.orderCount > row.invoiceCount) {
+      anomalies.push({
+        scope: row.symbol,
+        severity: 'high',
+        signal: 'Missing invoices',
+        detail: `${formatCount(row.orderCount - row.invoiceCount)} approved order(s) do not have invoice coverage in the selected period.`,
+      })
+    } else if (row.invoiceCount > row.orderCount) {
+      anomalies.push({
+        scope: row.symbol,
+        severity: 'medium',
+        signal: 'Extra invoices',
+        detail: `${formatCount(row.invoiceCount - row.orderCount)} invoice(s) do not reconcile to orders in the selected period.`,
+      })
+    }
+
+    if (Math.abs(row.feeGap) >= 1_000) {
+      anomalies.push({
+        scope: row.symbol,
+        severity: Math.abs(row.feeGap) >= 5_000 ? 'high' : 'medium',
+        signal: 'Comm diff',
+        detail: `Invoice total differs from order commissions by ${formatSignedAmount(row.feeGap)} COP.`,
+      })
+    }
+  }
+
+  for (const invoice of invoiceRows.filter((row) => !row.symbol).slice(0, 12)) {
+    anomalies.push({
+      scope: invoice.invoiceNumber,
+      severity: 'high',
+      signal: 'Unmapped invoice',
+      detail: invoice.description ?? 'The invoice description is empty and cannot be mapped.',
+    })
+  }
+
+  return anomalies.sort((left, right) => rankSeverity(right.severity) - rankSeverity(left.severity))
+}
+
+function rankSeverity(value: PaperworkAnomalyRow['severity']) {
+  if (value === 'high') {
+    return 3
+  }
+  if (value === 'medium') {
+    return 2
+  }
+  return 1
+}
+
 function toInvoiceDocumentRow(record: ParsedInvoiceLookupRecord): InvoiceDocumentRow {
   const side = normalizeSide(record.extracted_order_side) ?? normalizeInvoiceSide(record.line_description)
+  const payableAmount = normalizeNumber(record.payable_amount)
+  const taxAmount = normalizeNumber(record.tax_amount)
+  const taxExclusiveAmount = normalizeNumber(record.tax_exclusive_amount)
+  const taxInclusiveAmount = normalizeNumber(record.tax_inclusive_amount)
+  const baseAmount = taxExclusiveAmount || Math.max(0, payableAmount - taxAmount)
+  const totalAmount = taxInclusiveAmount || payableAmount || baseAmount + taxAmount
+
   return {
     invoiceNumber: record.invoice_number?.trim() || record.invoice_uuid,
     invoiceUuid: record.invoice_uuid,
@@ -234,8 +399,10 @@ function toInvoiceDocumentRow(record: ParsedInvoiceLookupRecord): InvoiceDocumen
     orderReferenceId: normalizeText(record.order_reference_id),
     side: side ?? 'unknown',
     symbol: inferInvoiceSymbol(record),
-    payableAmount: normalizeNumber(record.payable_amount),
-    taxAmount: normalizeNumber(record.tax_amount),
+    baseAmount,
+    payableAmount,
+    taxAmount,
+    totalAmount,
     description: normalizeText(record.line_description),
   }
 }
@@ -244,16 +411,6 @@ function compareDescendingTimestamps(left: string | null, right: string | null) 
   const leftTime = left ? new Date(left).getTime() : Number.NEGATIVE_INFINITY
   const rightTime = right ? new Date(right).getTime() : Number.NEGATIVE_INFINITY
   return rightTime - leftTime
-}
-
-function resolveOrderDateKey(record: StockOrdersLookupRecord) {
-  const createdAt = normalizeText(record.created_at)
-  if (createdAt) {
-    return createdAt.slice(0, 10)
-  }
-
-  const createdAtSymbol = normalizeText(record.created_at_symbol)
-  return createdAtSymbol ? createdAtSymbol.slice(0, 10) : null
 }
 
 function resolveOrderTimestamp(record: StockOrdersLookupRecord) {
@@ -327,4 +484,13 @@ function normalizeNumber(value: number | string | null | undefined) {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
+}
+
+function formatSignedAmount(value: number) {
+  const rounded = Math.round(value)
+  return `${rounded >= 0 ? '+' : ''}${rounded.toLocaleString('en-US')}`
+}
+
+function formatCount(value: number) {
+  return Math.max(0, Math.round(value)).toLocaleString('en-US')
 }

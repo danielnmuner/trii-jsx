@@ -3383,7 +3383,7 @@ button {
 .paperwork-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   overflow: auto;
   padding-right: 2px;
@@ -3393,6 +3393,10 @@ button {
   min-width: 0;
   display: grid;
   gap: 10px;
+}
+
+.paperwork-auth--gate {
+  width: 100%;
 }
 
 .paperwork-authBar {
@@ -3484,6 +3488,29 @@ button {
   box-shadow: var(--shadow);
 }
 
+.paperwork-authCard--wide {
+  width: 100%;
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 18px;
+}
+
+.paperwork-authCard--wide .paperwork-authCard__eyebrow,
+.paperwork-authCard--wide .paperwork-authCard__title,
+.paperwork-authCard--wide .paperwork-authCard__copy,
+.paperwork-authCard--wide .paperwork-authCard__notice {
+  grid-column: 1;
+}
+
+.paperwork-authCard--wide .paperwork-authCard__button {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  align-self: center;
+  justify-self: end;
+  min-width: 220px;
+}
+
 .paperwork-authCard__eyebrow {
   display: inline-flex;
   width: fit-content;
@@ -3551,10 +3578,6 @@ button {
   min-width: 0;
 }
 
-.paperwork-card--trace {
-  padding: 0;
-}
-
 .paperwork-card__header {
   display: flex;
   align-items: flex-start;
@@ -3619,47 +3642,45 @@ button {
   line-height: 1.5;
 }
 
-.paperwork-trace {
-  min-width: 0;
-  height: 100%;
+.paperwork-card__header--analytics {
+  align-items: flex-start;
+}
+
+.paperwork-analytics__toolbar {
   display: grid;
   gap: 8px;
-  padding: 9px 10px;
-  border: 1px solid rgba(84, 197, 255, 0.14);
-  border-radius: 12px;
-  background: rgba(10, 14, 18, 0.82);
+  justify-items: end;
+  flex: 0 0 auto;
 }
 
-.paperwork-trace__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+.paperwork-analytics__months {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
-.paperwork-trace__copy {
-  display: grid;
-  gap: 3px;
-}
-
-.paperwork-trace__title {
-  margin: 0;
-  color: rgba(244, 246, 248, 0.92);
+.paperwork-analytics__monthButton {
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(244, 246, 248, 0.56);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.7rem;
+  font-size: 0.52rem;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.paperwork-trace__copy p {
-  margin: 0;
-  color: rgba(244, 246, 248, 0.46);
-  font-size: 0.72rem;
-  line-height: 1.5;
+.paperwork-analytics__monthButton--active {
+  border-color: rgba(0, 255, 255, 0.26);
+  background: rgba(0, 255, 255, 0.09);
+  color: rgba(177, 246, 255, 0.96);
 }
 
-.paperwork-trace__status {
+.paperwork-analytics__status {
   display: inline-flex;
   align-items: center;
   min-height: 20px;
@@ -3667,176 +3688,45 @@ button {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  color: rgba(244, 246, 248, 0.8);
+  color: rgba(244, 246, 248, 0.72);
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.5rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  flex: 0 0 auto;
 }
 
-.paperwork-trace__status--live {
+.paperwork-analytics__status--ready {
   border-color: rgba(42, 255, 173, 0.2);
   color: rgba(140, 255, 212, 0.92);
 }
 
-.paperwork-trace__status--syncing,
-.paperwork-trace__status--loading {
+.paperwork-analytics__status--syncing,
+.paperwork-analytics__status--loading {
   border-color: rgba(84, 197, 255, 0.24);
   color: rgba(139, 221, 255, 0.92);
 }
 
-.paperwork-trace__status--degraded {
+.paperwork-analytics__status--degraded {
   border-color: rgba(255, 115, 128, 0.24);
   color: rgba(255, 170, 178, 0.92);
 }
 
-.paperwork-trace__empty {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px dashed rgba(255, 255, 255, 0.08);
-  color: rgba(244, 246, 248, 0.52);
-  font-size: 0.68rem;
-  line-height: 1.45;
+.paperwork-analytics__status--warning {
+  border-color: rgba(255, 196, 92, 0.3);
+  background: rgba(255, 196, 92, 0.08);
+  color: rgba(255, 228, 154, 0.98);
 }
 
-.paperwork-trace__grid {
+.paperwork-analytics__metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
-  gap: 7px;
-}
-
-.paperwork-traceCard {
-  min-width: 0;
-  display: grid;
-  gap: 7px;
-  padding: 8px 9px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.018);
-}
-
-.paperwork-traceCard__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-}
-
-.paperwork-traceCard__head strong {
-  color: rgba(244, 246, 248, 0.94);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.paperwork-traceCard__head span {
-  color: rgba(244, 246, 248, 0.38);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.48rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.paperwork-traceCard__metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.paperwork-traceMetric {
-  display: grid;
-  gap: 4px;
-}
-
-.paperwork-traceMetric span {
-  color: rgba(244, 246, 248, 0.38);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.46rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.paperwork-traceMetric__value {
-  font-family: "Manrope", "Segoe UI", sans-serif;
-  font-size: 0.88rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-}
-
-.paperwork-traceMetric__value--good {
-  color: rgba(66, 255, 172, 0.96);
-}
-
-.paperwork-traceMetric__value--watch {
-  color: rgba(255, 208, 96, 0.94);
-}
-
-.paperwork-traceMetric__value--late {
-  color: rgba(255, 119, 134, 0.96);
-}
-
-.paperwork-traceMetric__value--muted {
-  color: rgba(244, 246, 248, 0.42);
-}
-
-.paperwork-traceCard__footer {
-  display: grid;
-  gap: 3px;
-  padding-top: 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.paperwork-traceCard__footer span {
-  color: rgba(244, 246, 248, 0.54);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.5rem;
-  line-height: 1.4;
 }
 
 .paperwork-uploader {
   display: grid;
   gap: 10px;
-}
-
-.paperwork-userField {
-  display: grid;
-  gap: 7px;
-}
-
-.paperwork-userField__label {
-  color: rgba(244, 246, 248, 0.9);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.56rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.paperwork-userField__select {
-  min-height: 36px;
-  border-radius: 11px;
-  border: 1px solid rgba(84, 197, 255, 0.22);
-  background: rgba(9, 13, 18, 0.96);
-  color: rgba(244, 246, 248, 0.92);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.7rem;
-  padding: 0 11px;
-  outline: none;
-}
-
-.paperwork-userField__select:focus {
-  border-color: rgba(84, 197, 255, 0.42);
-  box-shadow: 0 0 0 1px rgba(84, 197, 255, 0.18);
-}
-
-.paperwork-userField__hint {
-  color: rgba(255, 196, 142, 0.88);
-  font-size: 0.68rem;
-  line-height: 1.45;
 }
 
 .paperwork-uploader__dropzone {
@@ -3991,6 +3881,13 @@ button {
   color: rgba(215, 232, 255, 0.92);
 }
 
+.paperwork-notice--warning {
+  border-color: rgba(255, 196, 92, 0.26);
+  background: rgba(255, 196, 92, 0.12);
+  color: rgba(255, 232, 180, 0.98);
+  box-shadow: inset 0 0 0 1px rgba(255, 196, 92, 0.08);
+}
+
 .paperwork-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4025,6 +3922,54 @@ button {
   font-size: 0.92rem;
   font-weight: 800;
   letter-spacing: -0.04em;
+}
+
+.paperwork-metricPill--positive strong {
+  color: rgba(66, 255, 172, 0.96);
+}
+
+.paperwork-metricPill--negative strong {
+  color: rgba(255, 119, 134, 0.96);
+}
+
+.paperwork-metricPill--warning strong {
+  color: rgba(255, 208, 96, 0.96);
+}
+
+.paperwork-section {
+  display: grid;
+  gap: 7px;
+}
+
+.paperwork-section__header {
+  display: grid;
+  gap: 2px;
+}
+
+.paperwork-section__header h4 {
+  margin: 0;
+  color: rgba(244, 246, 248, 0.92);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.paperwork-section__header p {
+  margin: 0;
+  color: rgba(244, 246, 248, 0.5);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.paperwork-empty {
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: rgba(244, 246, 248, 0.52);
+  font-size: 0.68rem;
+  line-height: 1.45;
 }
 
 .paperwork-details {
@@ -5086,8 +5031,8 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .paperwork-trace {
-    min-width: 0;
+  .paperwork-analytics__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -5285,9 +5230,25 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .paperwork-trace__grid,
-  .paperwork-traceCard__metrics {
+  .paperwork-card__header--analytics {
+    display: grid;
+  }
+
+  .paperwork-analytics__toolbar,
+  .paperwork-analytics__months {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
+  .paperwork-authCard--wide {
     grid-template-columns: 1fr;
+  }
+
+  .paperwork-authCard--wide .paperwork-authCard__button {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    min-width: 0;
   }
 
   .zscore-card__footer {
@@ -5528,6 +5489,10 @@ button {
   .historic-stats-card {
     padding: 7px;
     gap: 6px;
+  }
+
+  .paperwork-analytics__metrics {
+    grid-template-columns: 1fr;
   }
 
   .historic-stats-band {

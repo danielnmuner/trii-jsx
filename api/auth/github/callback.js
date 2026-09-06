@@ -1,4 +1,5 @@
 import {
+  assertGitHubIdentityHasEmail,
   assertGitHubUserAllowed,
   clearSessionCookies,
   createSessionCookieValue,
@@ -34,6 +35,7 @@ export default async function handler(req, res) {
       redirectUri,
     })
     const identity = await fetchGitHubIdentity(accessToken)
+    assertGitHubIdentityHasEmail(identity)
     assertGitHubUserAllowed(identity)
 
     clearSessionCookies(res)
@@ -46,7 +48,11 @@ export default async function handler(req, res) {
         ? error.statusCode
         : 302
     if (statusCode === 403) {
-      return redirect(res, '/?tab=paperwork&auth_error=forbidden')
+      const reason =
+        typeof error === 'object' && error !== null && 'reason' in error && typeof error.reason === 'string'
+          ? error.reason
+          : 'forbidden'
+      return redirect(res, `/?tab=paperwork&auth_error=${encodeURIComponent(reason)}`)
     }
 
     return redirect(res, '/?tab=paperwork&auth_error=github')

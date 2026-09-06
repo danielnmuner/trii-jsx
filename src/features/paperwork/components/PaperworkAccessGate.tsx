@@ -28,8 +28,8 @@ export function PaperworkAccessGate(props: PaperworkAccessGateProps) {
 
   if (isLoading) {
     return (
-      <section className="paperwork-auth">
-        <article className="paperwork-authCard">
+      <section className="paperwork-auth paperwork-auth--gate">
+        <article className="paperwork-authCard paperwork-authCard--wide">
           <span className="paperwork-authCard__eyebrow">Paperwork Access</span>
           <h3 className="paperwork-authCard__title">Checking GitHub session</h3>
           <p className="paperwork-authCard__copy">Hold on while we validate access to the paperwork workspace.</p>
@@ -40,8 +40,8 @@ export function PaperworkAccessGate(props: PaperworkAccessGateProps) {
 
   if (!session?.authenticated || !session.user) {
     return (
-      <section className="paperwork-auth">
-        <article className="paperwork-authCard">
+      <section className="paperwork-auth paperwork-auth--gate">
+        <article className="paperwork-authCard paperwork-authCard--wide">
           <span className="paperwork-authCard__eyebrow">Paperwork Access</span>
           <h3 className="paperwork-authCard__title">Login with GitHub</h3>
           <p className="paperwork-authCard__copy">

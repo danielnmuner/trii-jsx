@@ -9,6 +9,14 @@ export default function handler(req, res) {
       return sendJson(res, 200, { authenticated: false, user: null })
     }
 
+    if (typeof session.email !== 'string' || session.email.trim().length === 0) {
+      return sendJson(res, 200, {
+        authenticated: false,
+        user: null,
+        message: 'This GitHub session does not expose an email address required for Paperwork.',
+      })
+    }
+
     return sendJson(res, 200, {
       authenticated: true,
       user: {

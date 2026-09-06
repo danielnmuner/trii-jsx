@@ -117,6 +117,18 @@ export async function fetchGitHubIdentity(accessToken) {
   }
 }
 
+export function assertGitHubIdentityHasEmail(identity) {
+  const normalizedEmail = identity.email?.trim().toLowerCase() ?? null
+  if (normalizedEmail) {
+    return
+  }
+
+  const error = new Error('This GitHub account does not expose an email address required for Paperwork.')
+  error.statusCode = 403
+  error.reason = 'email'
+  throw error
+}
+
 export function assertGitHubUserAllowed(identity) {
   const allowedLogins = parseCsvEnv(process.env.PAPERWORK_GITHUB_ALLOWED_LOGINS)
   const allowedEmails = parseCsvEnv(process.env.PAPERWORK_GITHUB_ALLOWED_EMAILS)

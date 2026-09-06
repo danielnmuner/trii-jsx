@@ -467,9 +467,9 @@ export function AnalyticsPage() {
           <PaperworkAccessGate
             session={paperworkAuthQuery.data}
             isLoading={paperworkAuthQuery.isLoading}
-            errorMessage={resolvePaperworkAuthMessage(paperworkAuthQuery.error)}
+            errorMessage={paperworkAuthQuery.data?.message ?? resolvePaperworkAuthMessage(paperworkAuthQuery.error)}
           >
-            <PaperworkPanel symbols={effectiveSelectedSymbols} />
+            <PaperworkPanel authenticatedUserEmail={paperworkAuthQuery.data?.user?.email ?? null} />
           </PaperworkAccessGate>
         ) : null}
       </section>
@@ -485,6 +485,10 @@ function resolvePaperworkAuthMessage(error: unknown) {
   const authError = new URL(window.location.href).searchParams.get('auth_error')
   if (authError === 'forbidden') {
     return 'This GitHub account is not allowed to access Paperwork.'
+  }
+
+  if (authError === 'email') {
+    return 'This GitHub account must expose an email address to access Paperwork.'
   }
 
   if (authError === 'state') {

@@ -3379,8 +3379,8 @@ button {
 
 .paperwork-monthCards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
-  gap: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(174px, 1fr));
+  gap: 6px;
 }
 
 .paperwork-yearFilter {
@@ -3419,10 +3419,10 @@ button {
 
 .paperwork-monthCard {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
   min-width: 0;
-  padding: 8px 8px 9px;
+  padding: 7px 7px 8px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
@@ -3457,7 +3457,7 @@ button {
 
 .paperwork-monthCard__header strong {
   color: rgba(245, 248, 252, 0.94);
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   letter-spacing: 0.12em;
   min-width: 0;
 }
@@ -3472,8 +3472,8 @@ button {
 
 .paperwork-monthCard__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
 }
 
 .paperwork-monthCard__metric {
@@ -3485,12 +3485,12 @@ button {
 .paperwork-monthCard__metric span {
   color: rgba(188, 199, 214, 0.52);
   font-size: 0.33rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
 
 .paperwork-monthCard__metric strong {
   color: rgba(243, 247, 252, 0.94);
-  font-size: 0.66rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.02;
@@ -3523,18 +3523,18 @@ button {
 }
 
 .paperwork-monthCard__metric--pnl strong {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
 }
 
 @media (max-width: 1680px) {
   .paperwork-monthCards {
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   }
 }
 
 @media (max-width: 1480px) {
   .paperwork-monthCards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
   }
 }
 
@@ -5872,8 +5872,8 @@ button {
   }
 
   .paperwork-monthCards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
+    gap: 7px;
   }
 
   .paperwork-portfolio {
@@ -6117,17 +6117,39 @@ button {
   }
 
   .paperwork-monthCards {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .paperwork-monthCard {
     width: 100%;
-    padding: 8px;
+    padding: 6px;
   }
 
   .paperwork-monthCard__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 10px;
+    gap: 6px 7px;
+  }
+
+  .paperwork-monthCard__header strong {
+    font-size: 0.52rem;
+  }
+
+  .paperwork-monthCard__header span {
+    font-size: 0.3rem;
+  }
+
+  .paperwork-monthCard__metric span {
+    font-size: 0.29rem;
+    letter-spacing: 0.08em;
+  }
+
+  .paperwork-monthCard__metric strong {
+    font-size: 0.56rem;
+  }
+
+  .paperwork-monthCard__metric--pnl strong {
+    font-size: 0.62rem;
   }
 
   .paperwork-bars__row {
@@ -6201,6 +6223,48 @@ button {
 }
 
 @media (max-width: 540px) {
+  .paperwork-monthCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .paperwork-monthCard {
+    padding: 6px 5px 7px;
+  }
+
+  .paperwork-monthCard__header {
+    gap: 4px;
+  }
+
+  .paperwork-monthCard__header strong {
+    font-size: 0.48rem;
+    letter-spacing: 0.1em;
+  }
+
+  .paperwork-monthCard__header span {
+    font-size: 0.28rem;
+    letter-spacing: 0.09em;
+  }
+
+  .paperwork-monthCard__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 6px;
+  }
+
+  .paperwork-monthCard__metric span {
+    font-size: 0.27rem;
+    letter-spacing: 0.07em;
+  }
+
+  .paperwork-monthCard__metric strong {
+    font-size: 0.52rem;
+    line-height: 1;
+  }
+
+  .paperwork-monthCard__metric--pnl strong {
+    font-size: 0.58rem;
+  }
+
   .overview-card {
     padding: 7px;
     gap: 5px;

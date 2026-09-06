@@ -3842,6 +3842,15 @@ button {
 }
 
 .paperwork-analytics__switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(84, 197, 255, 0.3);
+  background: rgba(0, 210, 255, 0.08);
   color: rgba(191, 210, 232, 0.62);
   text-decoration: none;
   font-family: "IBM Plex Mono", monospace;
@@ -3849,14 +3858,26 @@ button {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 210, 255, 0.04),
+    0 0 14px rgba(0, 210, 255, 0.08);
   transition:
+    border-color 140ms ease,
+    background 140ms ease,
     color 140ms ease,
-    text-shadow 140ms ease;
+    text-shadow 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .paperwork-analytics__switch:hover {
   color: #61deff;
+  border-color: rgba(97, 222, 255, 0.52);
+  background: rgba(0, 210, 255, 0.12);
   text-shadow: 0 0 10px rgba(97, 222, 255, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(97, 222, 255, 0.08),
+    0 0 18px rgba(0, 210, 255, 0.14);
 }
 
 .paperwork-analytics__months {

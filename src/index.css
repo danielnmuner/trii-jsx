@@ -685,6 +685,66 @@ button {
   min-width: 0;
 }
 
+.analytics-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  min-width: 0;
+}
+
+.analytics-tabbar .ui-tabs {
+  flex: 1 1 auto;
+}
+
+.analytics-tabbar__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.analytics-tabbar__actionButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 0 8px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.analytics-tabbar__actionButton {
+  border: 0;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: rgba(24, 236, 255, 0.98);
+  text-shadow: 0 0 14px rgba(24, 236, 255, 0.22);
+  transition:
+    border-bottom-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease,
+    opacity 140ms ease;
+}
+
+.analytics-tabbar__actionButton:hover:not(:disabled) {
+  color: rgba(122, 245, 255, 1);
+  border-bottom-color: rgba(24, 236, 255, 0.9);
+}
+
+.analytics-tabbar__actionButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .ui-tab {
   flex: 0 1 auto;
   border: 0;
@@ -5936,6 +5996,16 @@ button {
     scrollbar-width: none;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .analytics-tabbar {
+    display: grid;
+    gap: 8px;
+  }
+
+  .analytics-tabbar__actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .ui-tabs::-webkit-scrollbar {

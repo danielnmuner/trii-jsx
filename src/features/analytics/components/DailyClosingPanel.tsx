@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DailyClosingRecord } from '../api/schemas'
+import { filterHistoricRecordsByRange } from '../lib/historicOpenAiPrompt'
 import type { DailyOrderPositionSummary } from '../lib/orderPosition'
 import {
   formatCurrency,
@@ -20,14 +21,24 @@ type DailyClosingWindow = {
 
 type DailyClosingPanelProps = {
   windows: DailyClosingWindow[]
+  rangeDays: (typeof dailyClosingRangeOptions)[number]
+  onChangeRangeDays: (value: (typeof dailyClosingRangeOptions)[number]) => void
   orderTimelineBySymbol?: Record<string, Record<string, DailyOrderPositionSummary | undefined>>
 }
 
 const dailyClosingRangeOptions = [365, 180, 90, 30, 15, 7] as const
 
-export function DailyClosingPanel({ windows, orderTimelineBySymbol = {} }: DailyClosingPanelProps) {
-  const [rangeDays, setRangeDays] = useState<(typeof dailyClosingRangeOptions)[number]>(365)
-  const visibleWindows = windows.filter((window) => window.records.length > 0)
+export function DailyClosingPanel({ windows, rangeDays, onChangeRangeDays, orderTimelineBySymbol = {} }: DailyClosingPanelProps) {
+  const visibleWindows = useMemo(
+    () =>
+      windows
+        .map((window) => ({
+          ...window,
+          records: filterHistoricRecordsByRange(window.records, rangeDays),
+        }))
+        .filter((window) => window.records.length > 0),
+    [rangeDays, windows],
+  )
 
   return (
     <section className="daily-close-grid" aria-label="Daily closing charts">
@@ -36,7 +47,7 @@ export function DailyClosingPanel({ windows, orderTimelineBySymbol = {} }: Daily
           key={window.symbol}
           window={window}
           rangeDays={rangeDays}
-          onChangeRangeDays={setRangeDays}
+          onChangeRangeDays={onChangeRangeDays}
           orderTimeline={orderTimelineBySymbol[window.symbol] ?? {}}
         />
       ))}
@@ -60,30 +71,7 @@ function DailyClosingCard({
     () => `daily-close-${window.symbol.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
     [window.symbol],
   )
-  const filteredRecords = useMemo(() => {
-    if (window.records.length === 0) {
-      return window.records
-    }
-
-    const epochs = window.records
-      .map((record) => new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime())
-      .filter((value) => !Number.isNaN(value))
-
-    if (epochs.length === 0) {
-      return window.records
-    }
-
-    const latestEpoch = Math.max(...epochs)
-    const rangeStart = latestEpoch - rangeDays * 24 * 60 * 60 * 1000
-
-    return window.records.filter((record) => {
-      if (!isColombiaBusinessDateKey(record.trading_date)) {
-        return false
-      }
-      const epoch = new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime()
-      return !Number.isNaN(epoch) && epoch >= rangeStart
-    })
-  }, [rangeDays, window.records])
+  const filteredRecords = useMemo(() => filterHistoricRecordsByRange(window.records, rangeDays), [rangeDays, window.records])
   const chart = useMemo(() => buildDailyClosingChart(filteredRecords), [filteredRecords])
   const activeRecord = useMemo(
     () => filteredRecords.find((record) => buildDailyClosingKey(record) === activeKey) ?? null,

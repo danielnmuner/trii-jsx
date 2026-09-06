@@ -11,12 +11,15 @@ type DailyClosingWindow = {
   records: DailyClosingRecord[]
 }
 
-export function useDailyOrderPositionTimeline(windows: DailyClosingWindow[], enabled: boolean) {
+export function useDailyOrderPositionTimeline(windows: DailyClosingWindow[], enabled: boolean, userEmail?: string | null) {
   const queries = useQueries({
     queries: windows.map((window) => ({
-      queryKey: ['analytics', 'order-position-timeline', window.symbol],
+      queryKey: ['analytics', 'order-position-timeline', userEmail ?? 'anonymous', window.symbol],
       queryFn: async (): Promise<Record<string, DailyOrderPositionSummary>> => {
-        const response = await fetchStockOrdersBySymbol(window.symbol, 500)
+        if (!userEmail) {
+          return {}
+        }
+        const response = await fetchStockOrdersBySymbol(window.symbol, 500, userEmail)
         return summarizeDailyOrderPositionTimeline(
           window.symbol,
           response.result.records,
@@ -26,7 +29,7 @@ export function useDailyOrderPositionTimeline(windows: DailyClosingWindow[], ena
           })),
         )
       },
-      enabled: enabled && Boolean(window.symbol),
+      enabled: enabled && Boolean(window.symbol) && Boolean(userEmail),
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
       staleTime: ANALYTICS_REALTIME_STALE_MS,

@@ -22,12 +22,18 @@ import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { usePaperworkAnalytics } from '../../paperwork/hooks/usePaperworkAnalytics'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
+import {
+  buildHistoricTransversalExportText,
+  downloadHistoricPromptFile,
+  filterHistoricRecordsByRange,
+} from '../lib/historicOpenAiPrompt'
 import { rankCoreSymbols, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
 const topTabs = ['Overview', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
 const visibleTopTabs = topTabs.filter((tab) => tab !== 'Benchmark Stats' && tab !== 'User Guide')
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
+const historicRangeOptions = [365, 180, 90, 30, 15, 7] as const
 
 function getErrorMessage(error: unknown, fallback = 'Unknown error') {
   return error instanceof Error ? error.message : fallback
@@ -53,6 +59,7 @@ export function AnalyticsPage() {
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
   const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>(() => resolveInitialTopTab())
+  const [historicRangeDays, setHistoricRangeDays] = useState<(typeof historicRangeOptions)[number]>(365)
   const [selectedPaperworkYear, setSelectedPaperworkYear] = useState<string | null>(null)
   const catalogReadySymbols = symbols.length > 0 ? symbols : []
   const orderedCatalogSymbols =
@@ -173,8 +180,12 @@ export function AnalyticsPage() {
       }, []),
     [dailyClosingQuery.results, effectiveSelectedSymbols],
   )
-  const dailyOrderTimelineQuery = useDailyOrderPositionTimeline(orderedDailyClosingResults, activeTab === 'Historic')
-  const paperworkAuthQuery = usePaperworkAuth(activeTab === 'Paperwork')
+  const paperworkAuthQuery = usePaperworkAuth(activeTab === 'Paperwork' || activeTab === 'Historic')
+  const dailyOrderTimelineQuery = useDailyOrderPositionTimeline(
+    orderedDailyClosingResults,
+    activeTab === 'Historic',
+    paperworkAuthQuery.data?.user?.email ?? null,
+  )
   const paperworkAnalyticsQuery = usePaperworkAnalytics(
     activeTab === 'Paperwork' ? paperworkAuthQuery.data?.user?.email ?? null : null,
     selectedPaperworkYear,
@@ -267,6 +278,16 @@ export function AnalyticsPage() {
   const hasCatalogData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
+  const visibleHistoricWindows = useMemo(
+    () =>
+      orderedDailyClosingResults
+        .map((window) => ({
+          ...window,
+          records: filterHistoricRecordsByRange(window.records, historicRangeDays),
+        }))
+        .filter((window) => window.records.length > 0),
+    [historicRangeDays, orderedDailyClosingResults],
+  )
 
   const catalogDegraded = catalogQuery.isError && hasCatalogData
   const snapshotDegraded =
@@ -356,6 +377,20 @@ export function AnalyticsPage() {
     snapshotsQuery.isLoading,
   ])
 
+  const handleHistoricExport = () => {
+    try {
+      const exportText = buildHistoricTransversalExportText({
+        rangeDays: historicRangeDays,
+        exportedAt: new Date().toISOString(),
+        windows: visibleHistoricWindows,
+        orderTimelineBySymbol: dailyOrderTimelineQuery.bySymbol,
+      })
+      downloadHistoricPromptFile(window, exportText, historicRangeDays)
+    } catch {
+      // Keep the interaction quiet; browser download UX is enough here.
+    }
+  }
+
   return (
     <main className="page-shell analytics-workspace">
       <MarketTape />
@@ -384,7 +419,21 @@ export function AnalyticsPage() {
         />
       ) : null}
 
-      <Tabs items={visibleTopTabs} active={activeTab} onChange={setActiveTab} />
+      <div className="analytics-tabbar">
+        <Tabs items={visibleTopTabs} active={activeTab} onChange={setActiveTab} />
+        {activeTab === 'Historic' ? (
+          <div className="analytics-tabbar__actions" aria-label="Historic actions">
+            <button
+              type="button"
+              className="analytics-tabbar__actionButton"
+              onClick={handleHistoricExport}
+              disabled={visibleHistoricWindows.length === 0}
+            >
+              Análisis técnico
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       <section className={`analytics-stage${activeTab === 'Paperwork' ? ' analytics-stage--scroll' : ''}`}>
         {activeTab === 'Overview' ? (
@@ -435,7 +484,12 @@ export function AnalyticsPage() {
           ) : dailyClosingQuery.results.length === 0 || dailyClosingQuery.results.every((window) => window.records.length === 0) ? (
             <StatusState title="No Data" description="No daily closing snapshots are available for the selected symbols." />
           ) : (
-            <DailyClosingPanel windows={orderedDailyClosingResults} orderTimelineBySymbol={dailyOrderTimelineQuery.bySymbol} />
+            <DailyClosingPanel
+              windows={orderedDailyClosingResults}
+              rangeDays={historicRangeDays}
+              onChangeRangeDays={setHistoricRangeDays}
+              orderTimelineBySymbol={dailyOrderTimelineQuery.bySymbol}
+            />
           )
         ) : null}
 

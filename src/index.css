@@ -1132,6 +1132,8 @@ button {
   min-width: 0;
   gap: 5px;
   padding: 6px 10px;
+  justify-content: flex-start;
+  align-self: stretch;
 }
 
 .overview-tape__item--simulation {
@@ -1649,7 +1651,8 @@ button {
   display: grid;
   align-items: end;
   gap: 1px;
-  min-height: 34px;
+  min-height: 52px;
+  flex: 1 1 auto;
   padding: 2px 0 1px;
 }
 
@@ -1663,7 +1666,7 @@ button {
   position: relative;
   width: 100%;
   min-width: 0;
-  height: 34px;
+  height: 52px;
   display: flex;
   align-items: end;
 }
@@ -1727,8 +1730,6 @@ button {
   min-width: 0;
   display: grid;
   grid-template-columns:
-    minmax(92px, 0.54fr)
-    1px
     minmax(0, 1.55fr)
     1px
     minmax(0, 1.55fr)
@@ -1754,67 +1755,6 @@ button {
   background-repeat: repeat-y;
   background-position: center;
   opacity: 0.72;
-}
-
-.overview-sim__positionCard {
-  min-width: 0;
-  display: grid;
-  align-content: start;
-  gap: 5px;
-}
-
-.overview-sim__positionHead {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.overview-sim__positionBody {
-  display: grid;
-  gap: 3px;
-}
-
-.overview-sim__positionBlock {
-  display: grid;
-  gap: 1px;
-}
-
-.overview-sim__positionCaption,
-.overview-sim__positionSub {
-  color: rgba(210, 222, 238, 0.52);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.46rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.overview-sim__positionValue,
-.overview-sim__positionDelta {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
-.overview-sim__positionValue {
-  color: rgba(236, 244, 255, 0.92);
-}
-
-.overview-sim__positionValue--positive,
-.overview-sim__positionDelta--positive {
-  color: var(--positive);
-}
-
-.overview-sim__positionValue--negative,
-.overview-sim__positionDelta--negative {
-  color: var(--negative);
-}
-
-.overview-sim__positionValue--neutral,
-.overview-sim__positionDelta--neutral {
-  color: rgba(236, 244, 255, 0.92);
 }
 
 .overview-sim__chartCard {
@@ -3406,44 +3346,51 @@ button {
 }
 
 .paperwork-authBar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 8px 14px;
+  padding: 8px 10px;
   border: 1px solid rgba(84, 197, 255, 0.16);
   border-radius: 12px;
   background: rgba(10, 14, 18, 0.82);
 }
 
-.paperwork-authBar__identity {
+.paperwork-authBar__metrics {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 8px 12px;
 }
 
-.paperwork-authBar__identity strong,
-.paperwork-authBar__identity span {
+.paperwork-authBar__metric {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 0;
+}
+
+.paperwork-authBar__metric span,
+.paperwork-authBar__metric strong {
   font-family: "IBM Plex Mono", monospace;
-}
-
-.paperwork-authBar__identity strong {
-  color: rgba(244, 246, 248, 0.94);
-  font-size: 0.76rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.paperwork-authBar__identity span {
-  color: rgba(244, 246, 248, 0.52);
-  font-size: 0.58rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.paperwork-authBar__metric span {
+  color: rgba(124, 225, 255, 0.76);
+  font-size: 0.46rem;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
 }
 
-.paperwork-authBar__eyebrow {
-  color: rgba(139, 221, 255, 0.9) !important;
+.paperwork-authBar__metric strong {
+  color: #58d6ff;
+  text-shadow: 0 0 14px rgba(88, 214, 255, 0.22);
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .paperwork-authBar__logout,
@@ -3451,19 +3398,20 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 10px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
   border: 1px solid rgba(84, 197, 255, 0.28);
   background: rgba(84, 197, 255, 0.1);
   color: rgba(179, 235, 255, 0.94);
   text-decoration: none;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.6rem;
+  font-size: 0.52rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .paperwork-authIcon {
@@ -3840,12 +3788,12 @@ button {
 
 .paperwork-analytics__metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 6px;
 }
 
 .paperwork-analytics__metrics--close {
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .paperwork-analytics__overviewGrid {
@@ -4353,7 +4301,7 @@ button {
 
 .paperwork-portfolio {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
@@ -4361,124 +4309,19 @@ button {
   grid-column: 1 / -1;
 }
 
-.paperwork-portfolio__metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+.paperwork-chartCard--table {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-.paperwork-composition {
-  display: grid;
-  grid-template-columns: 148px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
+.paperwork-chartCard--table .paperwork-section__header {
+  padding: 0 2px;
 }
 
-.paperwork-composition__ringWrap {
-  display: flex;
-  justify-content: center;
-}
-
-.paperwork-composition__ring {
-  width: 148px;
-  height: 148px;
-  transform: rotate(-90deg);
-}
-
-.paperwork-composition__track,
-.paperwork-composition__slice {
-  fill: none;
-  stroke-linecap: butt;
-}
-
-.paperwork-composition__track {
-  stroke: rgba(255, 255, 255, 0.06);
-  stroke-width: 18;
-}
-
-.paperwork-composition__slice {
-  stroke-width: 18;
-}
-
-.paperwork-composition__slice--0,
-.paperwork-composition__dot--0 {
-  stroke: #45ff9f;
-  background: #45ff9f;
-}
-
-.paperwork-composition__slice--1,
-.paperwork-composition__dot--1 {
-  stroke: #57d4ff;
-  background: #57d4ff;
-}
-
-.paperwork-composition__slice--2,
-.paperwork-composition__dot--2 {
-  stroke: #b06cff;
-  background: #b06cff;
-}
-
-.paperwork-composition__slice--3,
-.paperwork-composition__dot--3 {
-  stroke: #ffcb4d;
-  background: #ffcb4d;
-}
-
-.paperwork-composition__slice--4,
-.paperwork-composition__dot--4 {
-  stroke: #ff667e;
-  background: #ff667e;
-}
-
-.paperwork-composition__slice--5,
-.paperwork-composition__dot--5 {
-  stroke: #8a9bff;
-  background: #8a9bff;
-}
-
-.paperwork-composition__legend {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.paperwork-composition__legendRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) 56px 78px 58px;
-  gap: 8px;
-  align-items: center;
-}
-
-.paperwork-composition__legendRow strong,
-.paperwork-composition__legendRow span {
-  font-family: "IBM Plex Mono", monospace;
-}
-
-.paperwork-composition__legendRow strong {
-  color: rgba(244, 246, 248, 0.94);
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.paperwork-composition__legendRow span {
-  color: rgba(244, 246, 248, 0.66);
-  font-size: 0.54rem;
-  white-space: nowrap;
-}
-
-.paperwork-composition__legendMain {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.paperwork-composition__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  flex: 0 0 auto;
+.paperwork-chartCard--table .ui-table-shell {
+  width: 100%;
 }
 
 .paperwork-section__header {
@@ -4524,7 +4367,7 @@ button {
 
 .paperwork-expandTable {
   width: 100%;
-  min-width: 1160px;
+  min-width: 980px;
   border-collapse: collapse;
   table-layout: auto;
 }
@@ -4690,6 +4533,39 @@ button {
   color: rgba(255, 119, 134, 0.96);
 }
 
+.paperwork-resultBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.48rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.paperwork-resultBadge--positive {
+  border-color: rgba(69, 255, 159, 0.22);
+  background: rgba(69, 255, 159, 0.1);
+  color: rgba(191, 255, 223, 0.98);
+}
+
+.paperwork-resultBadge--negative {
+  border-color: rgba(255, 102, 126, 0.22);
+  background: rgba(255, 102, 126, 0.1);
+  color: rgba(255, 207, 216, 0.98);
+}
+
+.paperwork-resultBadge--neutral {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(244, 246, 248, 0.72);
+}
+
 .paperwork-expandTable__detailRow td {
   padding: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -4763,6 +4639,10 @@ button {
   font-size: 0.54rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.paperwork-expandTable__groupLink {
+  color: rgba(255, 176, 72, 0.98);
 }
 
 .paperwork-details {
@@ -5834,12 +5714,16 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .paperwork-portfolio {
+  .paperwork-authBar {
     grid-template-columns: 1fr;
   }
 
-  .paperwork-portfolio__metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .paperwork-authBar__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .paperwork-portfolio {
+    grid-template-columns: 1fr;
   }
 
   .paperwork-anomalyList__header,
@@ -6071,23 +5955,8 @@ button {
     min-width: 0;
   }
 
-  .paperwork-portfolio__metrics {
+  .paperwork-authBar__metrics {
     grid-template-columns: 1fr;
-  }
-
-  .paperwork-composition {
-    grid-template-columns: 1fr;
-    justify-items: start;
-  }
-
-  .paperwork-composition__ringWrap {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .paperwork-composition__legendRow {
-    grid-template-columns: minmax(0, 1fr) 56px 72px 56px;
-    gap: 6px;
   }
 
   .paperwork-bars__row {
@@ -6234,19 +6103,6 @@ button {
     min-width: 680px;
   }
 
-  .paperwork-composition__ring {
-    width: 128px;
-    height: 128px;
-  }
-
-  .paperwork-composition__legendRow strong {
-    font-size: 0.54rem;
-  }
-
-  .paperwork-composition__legendRow span {
-    font-size: 0.5rem;
-  }
-
   .overview-signal__values {
     font-size: 0.47rem;
     padding: 0 4px;
@@ -6320,8 +6176,8 @@ button {
 
   .overview-seasonality__chart,
   .overview-seasonality__bar-track {
-    min-height: 26px;
-    height: 26px;
+    min-height: 38px;
+    height: 38px;
   }
 
   .overview-sim {
@@ -6331,20 +6187,6 @@ button {
 
   .overview-sim__sectionDivider {
     display: none;
-  }
-
-  .overview-sim__positionCard {
-    gap: 5px;
-  }
-
-  .overview-sim__positionValue,
-  .overview-sim__positionDelta {
-    font-size: 0.62rem;
-  }
-
-  .overview-sim__positionCaption,
-  .overview-sim__positionSub {
-    font-size: 0.46rem;
   }
 
   .overview-sim__chartMeta {
@@ -6402,6 +6244,10 @@ button {
   .paperwork-analytics__metrics,
   .paperwork-analytics__metrics--close {
     grid-template-columns: 1fr;
+  }
+
+  .paperwork-authBar__metric strong {
+    font-size: 0.94rem;
   }
 
   .paperwork-anomalyList__header {

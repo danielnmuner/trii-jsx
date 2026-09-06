@@ -4,6 +4,7 @@ import { DataTable } from '../../../shared/ui/DataTable'
 import { parseStockOrdersCsv, type StockOrdersUploadResult } from '../lib/stockOrders'
 import { submitStockOrders } from '../api/client'
 import { PaperworkAnalyticsPanel } from './PaperworkAnalyticsPanel'
+import type { PaperworkAnalyticsQueryResult } from '../hooks/usePaperworkAnalytics'
 
 type NoticeState = {
   tone: 'error' | 'success' | 'info'
@@ -12,9 +13,10 @@ type NoticeState = {
 
 type PaperworkPanelProps = {
   authenticatedUserEmail: string | null
+  analyticsQuery: PaperworkAnalyticsQueryResult
 }
 
-export function PaperworkPanel({ authenticatedUserEmail }: PaperworkPanelProps) {
+export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery }: PaperworkPanelProps) {
   const queryClient = useQueryClient()
   const [ordersFile, setOrdersFile] = useState<File | null>(null)
   const [ordersResult, setOrdersResult] = useState<StockOrdersUploadResult | null>(null)
@@ -84,7 +86,7 @@ export function PaperworkPanel({ authenticatedUserEmail }: PaperworkPanelProps) 
           text: `Upload completed. Received ${response.result.received_records} rows, imported ${response.result.imported_records}, skipped ${response.result.duplicate_records} duplicates.`,
         })
         await queryClient.invalidateQueries({
-          queryKey: ['paperwork'],
+          queryKey: ['paperwork', 'orders', 'history', userEmail],
         })
       } catch (error) {
         setOrdersNotice({
@@ -100,7 +102,7 @@ export function PaperworkPanel({ authenticatedUserEmail }: PaperworkPanelProps) 
   return (
     <section className="paperwork-grid" aria-label="Paperwork workspace">
       <div className="paperwork-column paperwork-column--intake">
-        <PaperworkAnalyticsPanel authenticatedUserEmail={authenticatedUserEmail} />
+        <PaperworkAnalyticsPanel analyticsQuery={analyticsQuery} />
 
         <article className="paperwork-card paperwork-card--intake">
           <header className="paperwork-card__header">

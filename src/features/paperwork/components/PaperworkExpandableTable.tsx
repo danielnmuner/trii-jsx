@@ -1,199 +1,118 @@
 import { Fragment, useMemo, useState } from 'react'
-import {
-  createColumnHelper,
-  rowExpandingFeature,
-  tableFeatures,
-  useTable,
-  type ExpandedState,
-} from '@tanstack/react-table'
-import type { InvoiceDocumentRow, PaperworkAnalyticsRow } from '../lib/analytics'
+import type { InvoiceDocumentRow, PaperworkTableRow } from '../lib/analytics'
 
 type PaperworkExpandableTableProps = {
-  rows: PaperworkAnalyticsRow[]
-  invoiceRows: InvoiceDocumentRow[]
+  rows: PaperworkTableRow[]
 }
 
-type PaperworkExpandableRow = PaperworkAnalyticsRow & {
-  invoices: InvoiceDocumentRow[]
+type FlatRow = {
+  depth: number
+  row: PaperworkTableRow
 }
 
-const TABLE_FEATURES = tableFeatures({
-  rowExpandingFeature,
-})
-
-const COLUMN_HELPER = createColumnHelper<typeof TABLE_FEATURES, PaperworkExpandableRow>()
-
-const COLUMNS = COLUMN_HELPER.columns([
-  COLUMN_HELPER.display({
-    id: 'expand',
-    header: '',
-    cell: ({ row }) =>
-      row.getCanExpand() ? (
-        <button
-          type="button"
-          className={`paperwork-expandTable__toggle${row.getIsExpanded() ? ' is-expanded' : ''}`}
-          onClick={row.getToggleExpandedHandler()}
-          aria-label={row.getIsExpanded() ? `Ocultar facturas de ${row.original.symbol}` : `Ver facturas de ${row.original.symbol}`}
-          aria-expanded={row.getIsExpanded()}
-        >
-          {row.getIsExpanded() ? '-' : '+'}
-        </button>
-      ) : (
-        <span className="paperwork-expandTable__togglePlaceholder" aria-hidden="true" />
-      ),
-  }),
-  COLUMN_HELPER.accessor('symbol', {
-    id: 'symbol',
-    header: () => <ColumnHeader label="Simbolo" help="Ticker consolidado en ordenes y facturas mapeadas." />,
-    cell: (info) => <strong className="paperwork-expandTable__symbol">{info.getValue()}</strong>,
-  }),
-  COLUMN_HELPER.accessor('orderCount', {
-    id: 'orders',
-    header: () => <ColumnHeader label="Ordenes" help="Cantidad de ordenes aprobadas en el periodo." />,
-    cell: (info) => formatInteger(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('invoiceCount', {
-    id: 'invoices',
-    header: () => <ColumnHeader label="Facturas" help="Facturas Accival conciliadas al simbolo en el periodo." />,
-    cell: (info) => formatInteger(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('tradedGrossAmount', {
-    id: 'gross',
-    header: () => <ColumnHeader label="Bruto" help="Valor bruto total transado en ordenes aprobadas." />,
-    cell: (info) => formatMoney(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('orderCommission', {
-    id: 'orderCommission',
-    header: () => <ColumnHeader label="Comision orden" help="Comision reportada por la orden de Trii." />,
-    cell: (info) => formatMoney(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('calculatedCommission', {
-    id: 'calculatedCommission',
-    header: () => <ColumnHeader label="Comision calc" help="Referencia teorica usando 12.5 bps sobre el bruto operado." />,
-    cell: (info) => formatMoney(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('invoiceTaxAmount', {
-    id: 'invoiceTax',
-    header: () => <ColumnHeader label="Impuesto" help="Impuesto facturado por Accival para el simbolo." />,
-    cell: (info) => formatMoney(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('invoiceTotalAmount', {
-    id: 'invoiceTotal',
-    header: () => <ColumnHeader label="Total factura" help="Total facturado consolidado para el simbolo." />,
-    cell: (info) => formatMoney(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('openQuantity', {
-    id: 'openQuantity',
-    header: () => <ColumnHeader label="Qty abierta" help="Cantidad que sigue abierta luego de aplicar PEPS/FIFO." />,
-    cell: (info) => formatInteger(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('averageCost', {
-    id: 'averageCost',
-    header: () => <ColumnHeader label="Costo FIFO" help="Costo promedio remanente de la posicion abierta despues de aplicar PEPS/FIFO." />,
-    cell: (info) => formatPrice(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('closePrice', {
-    id: 'closePrice',
-    header: () => <ColumnHeader label="Cierre" help="Ultimo precio de cierre disponible para valorar la posicion abierta." />,
-    cell: (info) => formatPrice(info.getValue()),
-  }),
-  COLUMN_HELPER.accessor('mtmPnl', {
-    id: 'mtmPnl',
-    header: () => <ColumnHeader label="PyG" help="Ganancia o perdida mark-to-market de la posicion abierta al ultimo cierre." />,
-    cell: (info) => (
-      <span className={toneClass(info.getValue() ?? 0)}>
-        {formatSignedMoney(info.getValue() ?? 0)}
-      </span>
-    ),
-  }),
-  COLUMN_HELPER.accessor('feeGap', {
-    id: 'feeGap',
-    header: () => <ColumnHeader label="Dif comision" help="Diferencia entre la factura y la comision registrada en ordenes." />,
-    cell: (info) => (
-      <span className={toneClass(info.getValue())}>
-        {formatSignedMoney(info.getValue())}
-      </span>
-    ),
-  }),
-])
+const HEADERS = [
+  { key: 'symbol', label: 'Simbolo', help: 'Ticker consolidado en ordenes y facturas mapeadas.' },
+  { key: 'orders', label: 'Ordenes', help: 'Cantidad de ordenes aprobadas en el periodo.' },
+  { key: 'invoices', label: 'Facturas', help: 'Facturas Accival conciliadas al simbolo en el periodo.' },
+  { key: 'gross', label: 'Bruto', help: 'Valor bruto total transado en ordenes aprobadas.' },
+  { key: 'orderCommission', label: 'Comision orden', help: 'Comision reportada por la orden de Trii.' },
+  { key: 'invoiceTax', label: 'Impuesto', help: 'Impuesto facturado por Accival para el simbolo.' },
+  { key: 'invoiceTotal', label: 'Total factura', help: 'Total facturado consolidado para el simbolo.' },
+  { key: 'averageCost', label: 'Costo FIFO', help: 'Costo promedio remanente de la posicion abierta despues de aplicar PEPS/FIFO.' },
+  { key: 'realizedPnl', label: 'Utilidad neta', help: 'Ganancia o perdida neta realizada por compras y ventas cerradas, incluyendo comisiones.' },
+  { key: 'result', label: 'Resultado', help: 'Lectura rapida del resultado realizado de la operacion por simbolo.' },
+] as const
 
 export function PaperworkExpandableTable(props: PaperworkExpandableTableProps) {
-  const { rows, invoiceRows } = props
-  const [expanded, setExpanded] = useState<ExpandedState>({})
+  const { rows } = props
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
-  const data = useMemo<PaperworkExpandableRow[]>(() => {
-    const invoicesBySymbol = new Map<string, InvoiceDocumentRow[]>()
-
-    for (const invoice of invoiceRows) {
-      if (!invoice.symbol) {
-        continue
-      }
-
-      const normalizedSymbol = invoice.symbol.trim().toUpperCase()
-      const current = invoicesBySymbol.get(normalizedSymbol)
-      if (current) {
-        current.push(invoice)
-      } else {
-        invoicesBySymbol.set(normalizedSymbol, [invoice])
-      }
-    }
-
-    return rows.map((row) => ({
-      ...row,
-      invoices: invoicesBySymbol.get(row.symbol) ?? [],
-    }))
-  }, [invoiceRows, rows])
-
-  const table = useTable({
-    data,
-    columns: COLUMNS,
-    features: TABLE_FEATURES,
-    state: {
-      expanded,
-    },
-    onExpandedChange: setExpanded,
-    getRowId: (row) => row.symbol,
-    getRowCanExpand: (row) => row.original.invoices.length > 0,
-    manualExpanding: true,
-  })
+  const flatRows = useMemo(() => flattenRows(rows, expanded), [expanded, rows])
 
   return (
     <div className="paperwork-expandTableShell">
       <table className="paperwork-expandTable">
         <thead>
-          {table.getHeaderGroups().map((group) => (
-            <tr key={group.id}>
-              {group.headers.map((header) => (
-                <th key={header.id} className={`paperwork-expandTable__head paperwork-expandTable__head--${header.column.id}`}>
-                  {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                </th>
-              ))}
-            </tr>
-          ))}
+          <tr>
+            <th className="paperwork-expandTable__head paperwork-expandTable__head--expand" />
+            {HEADERS.map((header) => (
+              <th key={header.key} className={`paperwork-expandTable__head paperwork-expandTable__head--${header.key}`}>
+                <ColumnHeader label={header.label} help={header.help} />
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <Fragment key={row.id}>
-              <tr className="paperwork-expandTable__row">
-                {row.getAllCells().map((cell) => (
-                  <td key={cell.id} className={`paperwork-expandTable__cell paperwork-expandTable__cell--${cell.column.id}`}>
-                    <table.FlexRender cell={cell} />
+          {flatRows.map(({ row, depth }) => {
+            const canExpand = row.children.length > 0 || row.invoices.length > 0
+            const isExpanded = Boolean(expanded[row.id])
+            const isLeaf = row.scope === 'month'
+
+            return (
+              <Fragment key={row.id}>
+                <tr className={`paperwork-expandTable__row paperwork-expandTable__row--${row.scope}`}>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--expand">
+                    {canExpand ? (
+                      <button
+                        type="button"
+                        className={`paperwork-expandTable__toggle${isExpanded ? ' is-expanded' : ''}`}
+                        onClick={() => setExpanded((current) => ({ ...current, [row.id]: !current[row.id] }))}
+                        aria-label={isExpanded ? `Ocultar ${row.label}` : `Ver ${row.label}`}
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded ? '-' : '+'}
+                      </button>
+                    ) : (
+                      <span className="paperwork-expandTable__togglePlaceholder" aria-hidden="true" />
+                    )}
                   </td>
-                ))}
-              </tr>
-              {row.getIsExpanded() ? (
-                <tr className="paperwork-expandTable__detailRow">
-                  <td colSpan={row.getAllCells().length} className="paperwork-expandTable__detailCell">
-                    <ExpandedInvoicePanel symbol={row.original.symbol} invoices={row.original.invoices} />
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--symbol">
+                    <div className={`paperwork-expandTable__label paperwork-expandTable__label--${row.scope}`} style={{ paddingLeft: `${depth * 16}px` }}>
+                      <strong className="paperwork-expandTable__symbol">{row.label}</strong>
+                    </div>
+                  </td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--orders">{formatInteger(row.orderCount)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--invoices">{formatInteger(row.invoiceCount)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--gross">{formatMoney(row.tradedGrossAmount)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--orderCommission">{formatMoney(row.orderCommission)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--invoiceTax">{formatMoney(row.invoiceTaxAmount)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--invoiceTotal">{formatMoney(row.invoiceTotalAmount)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--averageCost">{formatPrice(row.averageCost)}</td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--realizedPnl">
+                    <span className={toneClass(row.realizedPnl)}>{formatSignedMoney(row.realizedPnl)}</span>
+                  </td>
+                  <td className="paperwork-expandTable__cell paperwork-expandTable__cell--result">
+                    <ResultBadge value={row.realizedPnl} />
                   </td>
                 </tr>
-              ) : null}
-            </Fragment>
-          ))}
+                {isLeaf && isExpanded ? (
+                  <tr className="paperwork-expandTable__detailRow">
+                    <td colSpan={HEADERS.length + 1} className="paperwork-expandTable__detailCell">
+                      <ExpandedInvoicePanel symbol={row.symbol ?? row.label} invoices={row.invoices} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            )
+          })}
         </tbody>
       </table>
     </div>
   )
+}
+
+function flattenRows(rows: PaperworkTableRow[], expanded: Record<string, boolean>, depth = 0): FlatRow[] {
+  const flat: FlatRow[] = []
+
+  for (const row of rows) {
+    flat.push({ row, depth })
+
+    if (row.children.length > 0 && expanded[row.id]) {
+      flat.push(...flattenRows(row.children, expanded, depth + 1))
+    }
+  }
+
+  return flat
 }
 
 function ColumnHeader(props: { label: string; help: string }) {
@@ -211,6 +130,14 @@ function ColumnHeader(props: { label: string; help: string }) {
   )
 }
 
+function ResultBadge(props: { value: number | null }) {
+  const value = props.value ?? 0
+  const label = value > 0 ? 'Ganando' : value < 0 ? 'Perdiendo' : 'Neutro'
+  const tone = value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'
+
+  return <span className={`paperwork-resultBadge paperwork-resultBadge--${tone}`}>{label}</span>
+}
+
 function ExpandedInvoicePanel(props: { symbol: string; invoices: InvoiceDocumentRow[] }) {
   const { symbol, invoices } = props
 
@@ -225,26 +152,40 @@ function ExpandedInvoicePanel(props: { symbol: string; invoices: InvoiceDocument
           <thead>
             <tr>
               <th>Emitida</th>
-              <th>Factura</th>
-              <th>Ref</th>
+              <th>Relacionadas</th>
+              <th>Descripcion</th>
               <th>Lado</th>
+              <th>Titulos</th>
+              <th>Utilidad</th>
               <th>Base</th>
               <th>Impuesto</th>
               <th>Total</th>
-              <th>Descripcion</th>
+              <th>Factura</th>
+              <th>XML</th>
             </tr>
           </thead>
           <tbody>
             {invoices.map((invoice) => (
               <tr key={invoice.invoiceUuid}>
                 <td>{formatDateTime(invoice.issuedAt)}</td>
-                <td>{invoice.invoiceNumber}</td>
-                <td>{invoice.orderReferenceId ?? '--'}</td>
+                <td>
+                  <span className={invoice.hasRelatedInvoices ? 'paperwork-expandTable__groupLink' : undefined}>
+                    {invoice.relatedInvoiceNumbers ?? '--'}
+                  </span>
+                </td>
+                <td>{invoice.description ?? '--'}</td>
                 <td>{formatSide(invoice.side)}</td>
+                <td>{formatAllocatedQuantity(invoice.allocatedQuantity)}</td>
+                <td>
+                  <span className={toneClass(invoice.realizedPnl ?? 0)}>
+                    {invoice.side === 'sell' ? formatSignedMoney(invoice.realizedPnl ?? 0) : '--'}
+                  </span>
+                </td>
                 <td>{formatMoney(invoice.baseAmount)}</td>
                 <td>{formatMoney(invoice.taxAmount)}</td>
                 <td>{formatMoney(invoice.totalAmount)}</td>
-                <td>{invoice.description ?? '--'}</td>
+                <td>{invoice.invoiceNumber}</td>
+                <td>{invoice.sourceXmlName ?? '--'}</td>
               </tr>
             ))}
           </tbody>
@@ -292,6 +233,14 @@ function formatDateTime(value: string | null) {
     minute: '2-digit',
     hourCycle: 'h23',
   }).format(date)
+}
+
+function formatAllocatedQuantity(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return '--'
+  }
+
+  return formatInteger(value)
 }
 
 function formatSide(value: InvoiceDocumentRow['side']) {

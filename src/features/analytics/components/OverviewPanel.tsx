@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
-import type { OrderPositionSummary } from '../lib/orderPosition'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { OverviewSessionVectorTile, type SessionVectorHoverSnapshot } from './OverviewSessionVectorTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
@@ -19,7 +18,6 @@ import {
 
 type OverviewPanelProps = {
   snapshots: AnalyticsSymbolFeed[]
-  orderPositionsBySymbol?: Record<string, OrderPositionSummary | undefined>
 }
 
 type TapeTone = 'positive' | 'negative' | 'neutral'
@@ -69,7 +67,6 @@ type TapeItemData = {
 
 export function OverviewPanel({
   snapshots,
-  orderPositionsBySymbol = {},
 }: OverviewPanelProps) {
   return (
     <section className="overview-stack" aria-label="Market overview">
@@ -78,7 +75,6 @@ export function OverviewPanel({
           <OverviewSnapshotCard
             key={snapshot.symbol}
             snapshot={snapshot}
-            orderPositionSummary={orderPositionsBySymbol[snapshot.symbol]}
           />
         )
       })}
@@ -88,10 +84,8 @@ export function OverviewPanel({
 
 function OverviewSnapshotCard({
   snapshot,
-  orderPositionSummary,
 }: {
   snapshot: AnalyticsSymbolFeed
-  orderPositionSummary?: OrderPositionSummary
 }) {
   const [sessionHover, setSessionHover] = useState<SessionVectorHoverSnapshot | null>(null)
   const [selectedSessionVectorDate, setSelectedSessionVectorDate] = useState<string | null>(null)
@@ -260,7 +254,7 @@ function OverviewSnapshotCard({
       <div className="overview-tape overview-tape--market" role="group" aria-label={`${snapshot.symbol} market tape`}>
         <div className="overview-tape__row overview-tape__row--market">
           <SeasonalityMiniChart profile={snapshot.seasonality_profile} capturedAt={current.captured_at} />
-          <DeterministicSimulationTile snapshot={current} positionSummary={orderPositionSummary} />
+          <DeterministicSimulationTile snapshot={current} />
         </div>
       </div>
     </article>

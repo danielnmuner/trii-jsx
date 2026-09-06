@@ -20,6 +20,7 @@ import { useOrderPositions } from '../hooks/useOrderPositions'
 import { usePaperworkAuth } from '../../paperwork/auth/usePaperworkAuth'
 import { PaperworkAccessGate } from '../../paperwork/components/PaperworkAccessGate'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
+import { usePaperworkAnalytics } from '../../paperwork/hooks/usePaperworkAnalytics'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { rankCoreSymbols, resolveAvailableQuantity, resolveOwnedInvestmentValue, type CoreSortIntent } from '../lib/coreSymbolSorting'
@@ -178,6 +179,9 @@ export function AnalyticsPage() {
   )
   const dailyOrderTimelineQuery = useDailyOrderPositionTimeline(orderedDailyClosingResults, activeTab === 'Historic')
   const paperworkAuthQuery = usePaperworkAuth(activeTab === 'Paperwork')
+  const paperworkAnalyticsQuery = usePaperworkAnalytics(
+    activeTab === 'Paperwork' ? paperworkAuthQuery.data?.user?.email ?? null : null,
+  )
 
   const eligibleOverviewSymbolSet = useMemo(
     () => new Set(orderedEligibleOverviewResults.map((result) => result.symbol)),
@@ -425,7 +429,6 @@ export function AnalyticsPage() {
           ) : (
             <OverviewPanel
               snapshots={orderedEligibleOverviewResults}
-              orderPositionsBySymbol={orderPositionsQuery.bySymbol}
             />
           )
         ) : null}
@@ -469,8 +472,12 @@ export function AnalyticsPage() {
             session={paperworkAuthQuery.data}
             isLoading={paperworkAuthQuery.isLoading}
             errorMessage={paperworkAuthQuery.data?.message ?? resolvePaperworkAuthMessage(paperworkAuthQuery.error)}
+            analyticsQuery={paperworkAnalyticsQuery}
           >
-            <PaperworkPanel authenticatedUserEmail={paperworkAuthQuery.data?.user?.email ?? null} />
+            <PaperworkPanel
+              authenticatedUserEmail={paperworkAuthQuery.data?.user?.email ?? null}
+              analyticsQuery={paperworkAnalyticsQuery}
+            />
           </PaperworkAccessGate>
         ) : null}
       </section>

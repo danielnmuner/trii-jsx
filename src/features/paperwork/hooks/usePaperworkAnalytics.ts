@@ -1,59 +1,49 @@
 import { useMemo } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { fetchDailyClosingSnapshots } from '../../analytics/api/client'
-import { fetchInvoicesByIssuedMonth, fetchStockOrdersByCreatedMonth, fetchStockOrdersBySymbol } from '../api/client'
-import type { StockOrdersLookupRecord } from '../api/schemas'
-import { buildPaperworkAnalytics } from '../lib/analytics'
+import { fetchInvoicesByIssuedMonth, fetchStockOrdersByCreatedMonth } from '../api/client'
+import type { ParsedInvoiceLookupRecord, StockOrdersLookupRecord } from '../api/schemas'
+import { buildPaperworkAnalytics, type PaperworkAnalyticsModel } from '../lib/analytics'
 
-const PAPERWORK_ANALYTICS_STALE_MS = 60_000
+const PAPERWORK_ANALYTICS_STALE_MS = Number.POSITIVE_INFINITY
+const PAPERWORK_ANALYTICS_GC_MS = Number.POSITIVE_INFINITY
+const PAPERWORK_HISTORY_MONTHS = 60
+const PAPERWORK_HISTORY_BATCH_SIZE = 6
+const PAPERWORK_EMPTY_RUN_STOP = 6
 
-export type PaperworkPeriodOption = {
-  value: '1m' | '3m' | '6m' | '12m'
-  label: string
-  months: number
+export type PaperworkAnalyticsQueryResult = {
+  model: PaperworkAnalyticsModel
+  isLoading: boolean
+  isFetching: boolean
+  isError: boolean
+  error: unknown
 }
 
-const PAPERWORK_PERIOD_OPTIONS: PaperworkPeriodOption[] = [
-  { value: '1m', label: '1M', months: 1 },
-  { value: '3m', label: '3M', months: 3 },
-  { value: '6m', label: '6M', months: 6 },
-  { value: '12m', label: '12M', months: 12 },
-]
-
-export function usePaperworkAnalytics(userEmail: string | null, periodMonths: number) {
-  const coveredMonths = useMemo(() => getRecentPaperworkMonths(periodMonths), [periodMonths])
-
-  const ordersMonthQueries = useQueries({
-    queries: coveredMonths.map((month) => ({
-      queryKey: ['paperwork', 'orders', 'month', userEmail, month.value],
-      queryFn: () => fetchStockOrdersByCreatedMonth(month.value, 500, userEmail ?? undefined),
-      enabled: Boolean(userEmail),
-      staleTime: PAPERWORK_ANALYTICS_STALE_MS,
-      gcTime: PAPERWORK_ANALYTICS_STALE_MS * 5,
-      refetchOnWindowFocus: false,
-    })),
+export function usePaperworkAnalytics(userEmail: string | null): PaperworkAnalyticsQueryResult {
+  const ordersHistoryQuery = useQuery({
+    queryKey: ['paperwork', 'orders', 'history', userEmail],
+    queryFn: () => fetchAllOrderHistory(userEmail ?? ''),
+    enabled: Boolean(userEmail),
+    staleTime: PAPERWORK_ANALYTICS_STALE_MS,
+    gcTime: PAPERWORK_ANALYTICS_GC_MS,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
-  const invoicesMonthQueries = useQueries({
-    queries: coveredMonths.map((month) => ({
-      queryKey: ['paperwork', 'invoices', 'month', userEmail, month.value],
-      queryFn: () => fetchInvoicesByIssuedMonth(month.value, userEmail ?? undefined),
-      enabled: Boolean(userEmail),
-      staleTime: PAPERWORK_ANALYTICS_STALE_MS,
-      gcTime: PAPERWORK_ANALYTICS_STALE_MS * 5,
-      refetchOnWindowFocus: false,
-    })),
+  const invoicesHistoryQuery = useQuery({
+    queryKey: ['paperwork', 'invoices', 'history', userEmail],
+    queryFn: () => fetchAllInvoiceHistory(userEmail ?? ''),
+    enabled: Boolean(userEmail),
+    staleTime: PAPERWORK_ANALYTICS_STALE_MS,
+    gcTime: PAPERWORK_ANALYTICS_GC_MS,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
-  const ordersMonthRecords = useMemo(
-    () => ordersMonthQueries.flatMap((query) => query.data?.result.records ?? []),
-    [ordersMonthQueries],
-  )
-
-  const invoicesMonthRecords = useMemo(
-    () => invoicesMonthQueries.flatMap((query) => query.data?.result.records ?? []),
-    [invoicesMonthQueries],
-  )
+  const ordersMonthRecords = ordersHistoryQuery.data ?? []
+  const invoicesMonthRecords = invoicesHistoryQuery.data ?? []
 
   const trackedSymbols = useMemo(() => {
     const symbols = ordersMonthRecords
@@ -63,31 +53,22 @@ export function usePaperworkAnalytics(userEmail: string | null, periodMonths: nu
     return Array.from(new Set(symbols)).sort((left, right) => left.localeCompare(right))
   }, [ordersMonthRecords])
 
-  const symbolHistoryQueries = useQueries({
-    queries: trackedSymbols.map((symbol) => ({
-      queryKey: ['paperwork', 'orders', 'symbol', userEmail, symbol],
-      queryFn: () => fetchStockOrdersBySymbol(symbol, 500, userEmail ?? undefined),
-      enabled: Boolean(userEmail),
-      staleTime: PAPERWORK_ANALYTICS_STALE_MS,
-      gcTime: PAPERWORK_ANALYTICS_STALE_MS * 5,
-      refetchOnWindowFocus: false,
-    })),
-  })
-
   const dailyClosingQueries = useQueries({
     queries: trackedSymbols.map((symbol) => ({
       queryKey: ['paperwork', 'daily-closing', symbol],
       queryFn: () => fetchDailyClosingSnapshots(symbol, 1),
       enabled: Boolean(userEmail),
       staleTime: PAPERWORK_ANALYTICS_STALE_MS,
-      gcTime: PAPERWORK_ANALYTICS_STALE_MS * 5,
+      gcTime: PAPERWORK_ANALYTICS_GC_MS,
+      refetchOnMount: false,
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     })),
   })
 
   return useMemo(() => {
-    const symbolOrderHistoryBySymbol = trackedSymbols.reduce<Record<string, StockOrdersLookupRecord[]>>((accumulator, symbol, index) => {
-      accumulator[symbol] = symbolHistoryQueries[index]?.data?.result.records ?? []
+    const symbolOrderHistoryBySymbol = trackedSymbols.reduce<Record<string, StockOrdersLookupRecord[]>>((accumulator, symbol) => {
+      accumulator[symbol] = ordersMonthRecords.filter((record) => String(record.symbol ?? '').trim().toUpperCase() === symbol)
       return accumulator
     }, {})
 
@@ -105,38 +86,99 @@ export function usePaperworkAnalytics(userEmail: string | null, periodMonths: nu
     })
 
     return {
-      coveredMonths,
       model,
       isLoading:
-        ordersMonthQueries.some((query) => query.isLoading) ||
-        invoicesMonthQueries.some((query) => query.isLoading) ||
-        symbolHistoryQueries.some((query) => query.isLoading) ||
+        ordersHistoryQuery.isLoading ||
+        invoicesHistoryQuery.isLoading ||
         dailyClosingQueries.some((query) => query.isLoading),
       isFetching:
-        ordersMonthQueries.some((query) => query.isFetching) ||
-        invoicesMonthQueries.some((query) => query.isFetching) ||
-        symbolHistoryQueries.some((query) => query.isFetching) ||
+        ordersHistoryQuery.isFetching ||
+        invoicesHistoryQuery.isFetching ||
         dailyClosingQueries.some((query) => query.isFetching),
       isError:
-        ordersMonthQueries.some((query) => query.isError) ||
-        invoicesMonthQueries.some((query) => query.isError) ||
-        symbolHistoryQueries.some((query) => query.isError) ||
+        ordersHistoryQuery.isError ||
+        invoicesHistoryQuery.isError ||
         dailyClosingQueries.some((query) => query.isError),
       error:
-        ordersMonthQueries.find((query) => query.error)?.error ??
-        invoicesMonthQueries.find((query) => query.error)?.error ??
-        symbolHistoryQueries.find((query) => query.error)?.error ??
+        ordersHistoryQuery.error ??
+        invoicesHistoryQuery.error ??
         dailyClosingQueries.find((query) => query.error)?.error ??
         null,
     }
-  }, [coveredMonths, dailyClosingQueries, invoicesMonthQueries, invoicesMonthRecords, ordersMonthQueries, ordersMonthRecords, symbolHistoryQueries, trackedSymbols])
+  }, [dailyClosingQueries, invoicesHistoryQuery.error, invoicesHistoryQuery.isError, invoicesHistoryQuery.isFetching, invoicesHistoryQuery.isLoading, invoicesMonthRecords, ordersHistoryQuery.error, ordersHistoryQuery.isError, ordersHistoryQuery.isFetching, ordersHistoryQuery.isLoading, ordersMonthRecords, trackedSymbols])
 }
 
-export function getPaperworkPeriodOptions() {
-  return PAPERWORK_PERIOD_OPTIONS
+async function fetchAllOrderHistory(userEmail: string) {
+  const months = getRecentPaperworkMonths(PAPERWORK_HISTORY_MONTHS)
+  const records: StockOrdersLookupRecord[] = []
+  const seenChecksums = new Set<string>()
+  let emptyRun = 0
+
+  for (let index = 0; index < months.length; index += PAPERWORK_HISTORY_BATCH_SIZE) {
+    const batch = months.slice(index, index + PAPERWORK_HISTORY_BATCH_SIZE)
+    const responses = await Promise.all(
+      batch.map((month) => fetchStockOrdersByCreatedMonth(month.value, 500, userEmail)),
+    )
+
+    let batchCount = 0
+
+    for (const response of responses) {
+      for (const record of response.result.records) {
+        const checksum = record.record_checksum?.trim()
+        if (checksum && seenChecksums.has(checksum)) {
+          continue
+        }
+        if (checksum) {
+          seenChecksums.add(checksum)
+        }
+        records.push(record)
+        batchCount += 1
+      }
+    }
+
+    emptyRun = batchCount === 0 ? emptyRun + batch.length : 0
+    if (records.length > 0 && emptyRun >= PAPERWORK_EMPTY_RUN_STOP) {
+      break
+    }
+  }
+
+  return records
 }
 
-export function getRecentPaperworkMonths(count = 3) {
+async function fetchAllInvoiceHistory(userEmail: string) {
+  const months = getRecentPaperworkMonths(PAPERWORK_HISTORY_MONTHS)
+  const records: ParsedInvoiceLookupRecord[] = []
+  const seenInvoices = new Set<string>()
+  let emptyRun = 0
+
+  for (let index = 0; index < months.length; index += PAPERWORK_HISTORY_BATCH_SIZE) {
+    const batch = months.slice(index, index + PAPERWORK_HISTORY_BATCH_SIZE)
+    const responses = await Promise.all(batch.map((month) => fetchInvoicesByIssuedMonth(month.value, userEmail)))
+
+    let batchCount = 0
+
+    for (const response of responses) {
+      for (const record of response.result.records) {
+        const invoiceUuid = record.invoice_uuid.trim()
+        if (seenInvoices.has(invoiceUuid)) {
+          continue
+        }
+        seenInvoices.add(invoiceUuid)
+        records.push(record)
+        batchCount += 1
+      }
+    }
+
+    emptyRun = batchCount === 0 ? emptyRun + batch.length : 0
+    if (records.length > 0 && emptyRun >= PAPERWORK_EMPTY_RUN_STOP) {
+      break
+    }
+  }
+
+  return records
+}
+
+function getRecentPaperworkMonths(count = 3) {
   const anchor = getBogotaCalendarAnchor()
 
   return Array.from({ length: count }, (_, index) => {

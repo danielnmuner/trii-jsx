@@ -6,8 +6,10 @@ export function usePaperworkAuth(enabled: boolean) {
     queryKey: ['paperwork', 'auth-session'],
     queryFn: fetchPaperworkSession,
     enabled,
-    staleTime: 60_000,
-    gcTime: 300_000,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 }

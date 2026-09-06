@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
+
 type DataTableProps = {
-  rows: Array<Record<string, string>>
+  rows: Array<Record<string, ReactNode>>
 }
 
 export function DataTable({ rows }: DataTableProps) {
@@ -17,7 +19,7 @@ export function DataTable({ rows }: DataTableProps) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={`${index}-${row[columns[0]] ?? 'row'}`}>
+            <tr key={`${index}-row`}>
               {columns.map((column) => (
                 <td key={column}>{row[column] ?? ''}</td>
               ))}

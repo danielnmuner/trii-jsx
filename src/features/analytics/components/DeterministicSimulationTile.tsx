@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { SnapshotRecord } from '../api/schemas'
-import type { OrderPositionSummary } from '../lib/orderPosition'
 import {
   ALERT_AMOUNT_THRESHOLD,
   buildFallbackScenario,
@@ -23,7 +22,6 @@ import { formatInteger } from '../lib/formatters'
 
 type DeterministicSimulationTileProps = {
   snapshot: SnapshotRecord
-  positionSummary?: OrderPositionSummary
 }
 
 type PriceScenario = {
@@ -64,7 +62,7 @@ const CHART_WIDTH = 420
 const CHART_HEIGHT = 110
 const CHART_PADDING = { top: 22, right: 28, bottom: 18, left: 24 }
 
-export function DeterministicSimulationTile({ snapshot, positionSummary }: DeterministicSimulationTileProps) {
+export function DeterministicSimulationTile({ snapshot }: DeterministicSimulationTileProps) {
   const bidGradientId = useId().replace(/:/g, '')
   const askGradientId = `${bidGradientId}-ask`
   const bidScenarios = useMemo(() => buildBidScenarios(snapshot), [snapshot])
@@ -141,10 +139,6 @@ export function DeterministicSimulationTile({ snapshot, positionSummary }: Deter
   return (
     <section className="overview-tape__item overview-tape__item--market overview-tape__item--simulation" aria-label="Deterministic trade simulation">
       <div className="overview-sim">
-        <PositionSnapshotCard snapshot={snapshot} positionSummary={positionSummary} />
-
-        <div className="overview-sim__sectionDivider" aria-hidden="true" />
-
         <PriceChart
           title="Bid"
           axisStart={formatInteger(bidScenarios[0]?.price)}
@@ -250,48 +244,6 @@ export function DeterministicSimulationTile({ snapshot, positionSummary }: Deter
         </div>
       </div>
     </section>
-  )
-}
-
-function PositionSnapshotCard({
-  snapshot,
-  positionSummary,
-}: {
-  snapshot: SnapshotRecord
-  positionSummary?: OrderPositionSummary
-}) {
-  const quantity = positionSummary?.availableQuantity ?? 0
-  const weightedAveragePrice = positionSummary?.weightedAveragePrice ?? null
-  const deltaValue = positionSummary?.deltaValue ?? null
-  const deltaPct = positionSummary?.deltaPct ?? null
-  const tone = deltaValue === null ? 'neutral' : deltaValue >= 0 ? 'positive' : 'negative'
-
-  return (
-    <div className="overview-sim__positionCard">
-      <div className="overview-sim__positionHead">
-        <span className="overview-sim__metricLabel">Inventory</span>
-      </div>
-
-      <div className="overview-sim__positionBody">
-        <div className="overview-sim__positionBlock">
-          <span className="overview-sim__positionCaption">Average</span>
-          <strong className={`overview-sim__positionValue overview-sim__positionValue--${tone}`}>
-            {weightedAveragePrice === null ? '--' : formatInteger(weightedAveragePrice)}
-          </strong>
-        </div>
-
-        <div className="overview-sim__positionBlock">
-          <span className="overview-sim__positionCaption">Qty</span>
-          <strong className="overview-sim__positionValue">{formatInteger(quantity)}</strong>
-        </div>
-      </div>
-
-      <div className={`overview-sim__positionDelta overview-sim__positionDelta--${tone}`}>
-        {deltaValue === null || deltaPct === null ? '--' : `${formatSignedInteger(deltaValue)} (${formatSignedPercent(deltaPct)})`}
-      </div>
-
-      <div className="overview-sim__positionSub">vs last {formatInteger(snapshot.last_price)}</div>
-    </div>
   )
 }
 

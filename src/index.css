@@ -3345,55 +3345,6 @@ button {
   width: 100%;
 }
 
-.paperwork-authBar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px 14px;
-  padding: 8px 10px;
-  border: 1px solid rgba(84, 197, 255, 0.16);
-  border-radius: 12px;
-  background: rgba(10, 14, 18, 0.82);
-}
-
-.paperwork-authBar__metrics {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
-  gap: 8px 12px;
-}
-
-.paperwork-authBar__metric {
-  min-width: 0;
-  display: grid;
-  gap: 1px;
-  padding: 0;
-}
-
-.paperwork-authBar__metric span,
-.paperwork-authBar__metric strong {
-  font-family: "IBM Plex Mono", monospace;
-  text-transform: uppercase;
-}
-
-.paperwork-authBar__metric span {
-  color: rgba(124, 225, 255, 0.76);
-  font-size: 0.46rem;
-  letter-spacing: 0.14em;
-  white-space: nowrap;
-}
-
-.paperwork-authBar__metric strong {
-  color: #58d6ff;
-  text-shadow: 0 0 14px rgba(88, 214, 255, 0.22);
-  font-size: 1.08rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  white-space: nowrap;
-  line-height: 1;
-}
-
-.paperwork-authBar__logout,
 .paperwork-authCard__button {
   display: inline-flex;
   align-items: center;
@@ -3421,10 +3372,172 @@ button {
   display: block;
 }
 
-.paperwork-authBar__logout:hover,
 .paperwork-authCard__button:hover {
   border-color: rgba(84, 197, 255, 0.42);
   background: rgba(84, 197, 255, 0.14);
+}
+
+.paperwork-monthCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(218px, 218px));
+  justify-content: start;
+  gap: 7px;
+}
+
+.paperwork-yearFilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.paperwork-yearFilter__button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(191, 210, 232, 0.54);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    text-shadow 140ms ease,
+    opacity 140ms ease;
+}
+
+.paperwork-yearFilter__button:hover {
+  color: rgba(234, 243, 252, 0.84);
+}
+
+.paperwork-yearFilter__button.is-active {
+  color: #61deff;
+  text-shadow: 0 0 10px rgba(97, 222, 255, 0.24);
+}
+
+.paperwork-monthCard {
+  display: grid;
+  gap: 6px;
+  width: 218px;
+  max-width: 100%;
+  padding: 8px 8px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(circle at top right, rgba(0, 210, 255, 0.08), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 52%),
+    rgba(255, 255, 255, 0.014);
+}
+
+.paperwork-monthCard:first-child {
+  border-color: rgba(97, 222, 255, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(97, 222, 255, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(97, 222, 255, 0.04), transparent 54%),
+    rgba(255, 255, 255, 0.016);
+}
+
+.paperwork-monthCard__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.paperwork-monthCard__header strong,
+.paperwork-monthCard__header span,
+.paperwork-monthCard__metric span,
+.paperwork-monthCard__metric strong {
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.paperwork-monthCard__header strong {
+  color: rgba(245, 248, 252, 0.94);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+}
+
+.paperwork-monthCard__header span {
+  color: rgba(164, 188, 217, 0.68);
+  font-size: 0.34rem;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.paperwork-monthCard__grid {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.paperwork-monthCard__metric {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.paperwork-monthCard__metric span {
+  color: rgba(188, 199, 214, 0.52);
+  font-size: 0.33rem;
+  letter-spacing: 0.12em;
+}
+
+.paperwork-monthCard__metric strong {
+  color: rgba(243, 247, 252, 0.94);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+  white-space: nowrap;
+}
+
+.paperwork-monthCard__metric strong.paperwork-expandTable__value--positive {
+  color: var(--positive);
+}
+
+.paperwork-monthCard__metric strong.paperwork-expandTable__value--negative {
+  color: var(--negative);
+}
+
+.paperwork-monthCard__metric--buy strong {
+  color: #4dffad;
+}
+
+.paperwork-monthCard__metric--sell strong {
+  color: #57d4ff;
+}
+
+.paperwork-monthCard__metric--total strong {
+  color: #7be7ff;
+}
+
+.paperwork-monthCard__metric--tax strong {
+  color: #ffd36a;
+}
+
+.paperwork-monthCard__metric--pnl strong {
+  font-size: 0.72rem;
+}
+
+@media (max-width: 1680px) {
+  .paperwork-monthCards {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 210px));
+  }
+
+  .paperwork-monthCard {
+    width: 210px;
+  }
+}
+
+@media (max-width: 1480px) {
+  .paperwork-monthCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .paperwork-authCard {
@@ -3714,11 +3827,36 @@ button {
   gap: 8px;
 }
 
+.paperwork-analytics__headerMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .paperwork-analytics__toolbar {
-  display: grid;
-  gap: 6px;
-  justify-items: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
   flex: 0 0 auto;
+}
+
+.paperwork-analytics__switch {
+  color: rgba(191, 210, 232, 0.62);
+  text-decoration: none;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition:
+    color 140ms ease,
+    text-shadow 140ms ease;
+}
+
+.paperwork-analytics__switch:hover {
+  color: #61deff;
+  text-shadow: 0 0 10px rgba(97, 222, 255, 0.2);
 }
 
 .paperwork-analytics__months {
@@ -5714,12 +5852,8 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .paperwork-authBar {
-    grid-template-columns: 1fr;
-  }
-
-  .paperwork-authBar__metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .paperwork-monthCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .paperwork-portfolio {
@@ -5940,7 +6074,6 @@ button {
 
   .paperwork-analytics__toolbar,
   .paperwork-analytics__months {
-    justify-items: start;
     justify-content: flex-start;
   }
 
@@ -5955,8 +6088,26 @@ button {
     min-width: 0;
   }
 
-  .paperwork-authBar__metrics {
+  .paperwork-yearFilter {
+    gap: 8px;
+  }
+
+  .paperwork-yearFilter__button {
+    font-size: 0.66rem;
+  }
+
+  .paperwork-monthCards {
     grid-template-columns: 1fr;
+  }
+
+  .paperwork-monthCard {
+    width: 100%;
+  }
+
+  .paperwork-monthCard__grid {
+    grid-template-columns: repeat(2, max-content);
+    justify-content: space-between;
+    gap: 8px 10px;
   }
 
   .paperwork-bars__row {
@@ -6244,10 +6395,6 @@ button {
   .paperwork-analytics__metrics,
   .paperwork-analytics__metrics--close {
     grid-template-columns: 1fr;
-  }
-
-  .paperwork-authBar__metric strong {
-    font-size: 0.94rem;
   }
 
   .paperwork-anomalyList__header {

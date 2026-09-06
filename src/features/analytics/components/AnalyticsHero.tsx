@@ -64,13 +64,11 @@ export function AnalyticsHero({
 type AnalyticsFiltersProps = {
   headerSummary: ReactNode
   orderedSymbols: string[]
-  ownedSymbols: string[]
   latestBySymbol: Record<string, AnalyticsSymbolFeed | undefined>
   symbols: string[]
   sortIntent: CoreSortIntent
   onSymbolOrderChange: (symbols: string[]) => void
   onSortIntentChange: (intent: CoreSortIntent) => void
-  onOwnedSymbolsSelect: () => void
 }
 
 type SymbolChipTone = 'positive' | 'negative' | 'neutral'
@@ -86,13 +84,11 @@ type SymbolChipViewModel = {
 export function AnalyticsFilters({
   headerSummary,
   orderedSymbols,
-  ownedSymbols,
   latestBySymbol,
   symbols,
   sortIntent,
   onSymbolOrderChange,
   onSortIntentChange,
-  onOwnedSymbolsSelect,
 }: AnalyticsFiltersProps) {
   const displaySymbols = orderedSymbols.length > 0 ? orderedSymbols : symbols
   const [activeDragSymbol, setActiveDragSymbol] = useState<string | null>(null)
@@ -209,14 +205,6 @@ export function AnalyticsFilters({
               </button>
             )
           })}
-          <button
-            type="button"
-            className="analytics-sortbar__button analytics-sortbar__button--action"
-            onClick={onOwnedSymbolsSelect}
-            disabled={ownedSymbols.length === 0}
-          >
-            Owned
-          </button>
         </div>
         {headerSummary}
       </div>

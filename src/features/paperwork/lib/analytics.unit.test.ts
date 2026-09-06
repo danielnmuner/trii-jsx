@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPaperworkAnalytics } from './analytics'
+import { buildPaperworkAnalytics, derivePaperworkAvailableYears, filterPaperworkAnalyticsByYear } from './analytics'
 import type { ParsedInvoiceLookupRecord, StockOrdersLookupRecord } from '../api/schemas'
 
 describe('buildPaperworkAnalytics', () => {
@@ -109,5 +109,80 @@ describe('buildPaperworkAnalytics', () => {
     expect(result.dividendRows[0]?.symbol).toBe('GRUPOARGOS')
     expect(result.alertRows).toHaveLength(0)
     expect(result.unmappedInvoices).toHaveLength(0)
+  })
+
+  it('derives available years and filters paperwork analytics without refetching', () => {
+    const orders: StockOrdersLookupRecord[] = [
+      {
+        symbol: 'ECOPETROL',
+        order_side: 'BUY',
+        normalized_status: 'approved',
+        created_at: '2025-12-20T09:00:00-05:00',
+        filled_quantity: 10,
+        price_per_share: 2000,
+        gross_amount: 20000,
+        commission_amount: 30,
+        imported_at: '2025-12-20T09:01:00-05:00',
+        created_at_symbol: '2025-12-20T09:00:00-05:00#ECOPETROL',
+      },
+      {
+        symbol: 'ECOPETROL',
+        order_side: 'SELL',
+        normalized_status: 'approved',
+        created_at: '2026-01-10T09:00:00-05:00',
+        filled_quantity: 10,
+        price_per_share: 2200,
+        gross_amount: 22000,
+        commission_amount: 35,
+        imported_at: '2026-01-10T09:01:00-05:00',
+        created_at_symbol: '2026-01-10T09:00:00-05:00#ECOPETROL',
+      },
+    ]
+
+    const invoices: ParsedInvoiceLookupRecord[] = [
+      {
+        invoice_uuid: 'buy-2025',
+        invoice_number: 'LIBO-2025',
+        order_reference_id: 'BUY-2025',
+        issued_at: '2025-12-20T16:00:00-05:00',
+        payable_amount: 30,
+        tax_exclusive_amount: 25,
+        tax_inclusive_amount: 30,
+        tax_amount: 5,
+        line_description: 'COMISION: COMPRA ACCIONES ORDINAR ECOPETROL',
+        extracted_order_side: 'BUY',
+        source_xml_s3_key: 'invoices/user/hash/LIBO-2025.xml',
+      },
+      {
+        invoice_uuid: 'sell-2026',
+        invoice_number: 'LIBO-2026',
+        order_reference_id: 'SELL-2026',
+        issued_at: '2026-01-10T16:00:00-05:00',
+        payable_amount: 35,
+        tax_exclusive_amount: 29,
+        tax_inclusive_amount: 35,
+        tax_amount: 6,
+        line_description: 'COMISION: VENTA ACCIONES ORDINAR ECOPETROL',
+        extracted_order_side: 'SELL',
+        source_xml_s3_key: 'invoices/user/hash/LIBO-2026.xml',
+      },
+    ]
+
+    const model = buildPaperworkAnalytics({
+      ordersMonthRecords: orders,
+      invoicesMonthRecords: invoices,
+      symbolOrderHistoryBySymbol: { ECOPETROL: orders },
+      latestClosingPriceBySymbol: { ECOPETROL: 2300 },
+    })
+
+    expect(derivePaperworkAvailableYears(model)).toEqual(['2026', '2025'])
+
+    const filtered = filterPaperworkAnalyticsByYear(model, '2026')
+
+    expect(filtered.summary.approvedOrderCount).toBe(1)
+    expect(filtered.summary.invoiceCount).toBe(1)
+    expect(filtered.tableRows).toHaveLength(1)
+    expect(filtered.tableRows[0]?.children).toHaveLength(1)
+    expect(filtered.tableRows[0]?.children[0]?.year).toBe('2026')
   })
 })

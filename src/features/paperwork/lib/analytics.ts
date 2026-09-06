@@ -55,6 +55,8 @@ export type PaperworkAnalyticsRow = {
   sellCount: number
   boughtQuantity: number
   soldQuantity: number
+  buyGrossAmount: number
+  sellGrossAmount: number
   tradedGrossAmount: number
   orderCommission: number
   calculatedCommission: number
@@ -139,6 +141,8 @@ export type PaperworkTableRow = {
   sellCount: number
   boughtQuantity: number
   soldQuantity: number
+  buyGrossAmount: number
+  sellGrossAmount: number
   tradedGrossAmount: number
   orderCommission: number
   calculatedCommission: number
@@ -193,6 +197,8 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
       sellCount: 0,
       boughtQuantity: 0,
       soldQuantity: 0,
+      buyGrossAmount: 0,
+      sellGrossAmount: 0,
       tradedGrossAmount: 0,
       orderCommission: 0,
       calculatedCommission: 0,
@@ -230,9 +236,11 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
     if (side === 'buy') {
       row.buyCount += 1
       row.boughtQuantity += quantity
+      row.buyGrossAmount += grossAmount
     } else if (side === 'sell') {
       row.sellCount += 1
       row.soldQuantity += quantity
+      row.sellGrossAmount += grossAmount
     }
   }
 
@@ -339,6 +347,97 @@ export function buildPaperworkAnalytics(input: BuildPaperworkAnalyticsInput): Pa
   }
 }
 
+export function derivePaperworkAvailableYears(model: PaperworkAnalyticsModel) {
+  const years = new Set<string>()
+
+  for (const row of model.tableRows) {
+    for (const child of row.children) {
+      if (child.scope === 'year' && child.year) {
+        years.add(child.year)
+      }
+    }
+  }
+
+  for (const invoice of [...model.invoiceRows, ...model.dividendRows, ...model.unmappedInvoices]) {
+    const year = toCalendarYear(invoice.issuedAt)
+    if (year) {
+      years.add(year)
+    }
+  }
+
+  return Array.from(years).sort((left, right) => right.localeCompare(left))
+}
+
+export function filterPaperworkAnalyticsByYear(model: PaperworkAnalyticsModel, year: string | null) {
+  const normalizedYear = normalizePaperworkYear(year)
+  if (!normalizedYear) {
+    return model
+  }
+
+  const rowsBySymbol = new Map(model.rows.map((row) => [row.symbol, row]))
+  const tableRows = model.tableRows
+    .map((row) => filterSymbolTableRowByYear(row, normalizedYear, rowsBySymbol))
+    .filter((row): row is PaperworkTableRow => row !== null)
+
+  const rows = tableRows.map((row) => toAnalyticsRowFromTableRow(row, rowsBySymbol.get(row.label)))
+  const invoiceRows = model.invoiceRows.filter((row) => toCalendarYear(row.issuedAt) === normalizedYear)
+  const dividendRows = model.dividendRows.filter((row) => toCalendarYear(row.issuedAt) === normalizedYear)
+  const unmappedInvoices = model.unmappedInvoices.filter((row) => toCalendarYear(row.issuedAt) === normalizedYear)
+  const alertRows = model.alertRows.filter((row) => toCalendarYear(row.tradingDate) === normalizedYear)
+
+  const summary = rows.reduce<PaperworkAnalyticsSummary>(
+    (accumulator, row) => {
+      accumulator.approvedOrderCount += row.orderCount
+      accumulator.buyCount += row.buyCount
+      accumulator.sellCount += row.sellCount
+      accumulator.boughtQuantity += row.boughtQuantity
+      accumulator.soldQuantity += row.soldQuantity
+      accumulator.tradedGrossAmount += row.tradedGrossAmount
+      accumulator.orderCommission += row.orderCommission
+      accumulator.calculatedCommission += row.calculatedCommission
+      accumulator.invoiceBaseAmount += row.invoiceBaseAmount
+      accumulator.invoiceTaxAmount += row.invoiceTaxAmount
+      accumulator.invoiceTotalAmount += row.invoiceTotalAmount
+      accumulator.feeGap += row.feeGap
+      accumulator.realizedPnl += row.realizedPnl
+      accumulator.openQuantity += row.openQuantity
+      accumulator.mtmPnl += row.mtmPnl ?? 0
+      return accumulator
+    },
+    {
+      approvedOrderCount: 0,
+      invoiceCount: invoiceRows.length,
+      mappedInvoiceCount: invoiceRows.filter((row) => row.symbol).length,
+      unmappedInvoiceCount: unmappedInvoices.length,
+      buyCount: 0,
+      sellCount: 0,
+      boughtQuantity: 0,
+      soldQuantity: 0,
+      tradedGrossAmount: 0,
+      orderCommission: 0,
+      calculatedCommission: 0,
+      invoiceBaseAmount: 0,
+      invoiceTaxAmount: 0,
+      invoiceTotalAmount: 0,
+      feeGap: 0,
+      realizedPnl: 0,
+      openQuantity: 0,
+      mtmPnl: 0,
+    },
+  )
+
+  return {
+    ...model,
+    summary,
+    rows,
+    tableRows,
+    alertRows,
+    invoiceRows,
+    dividendRows,
+    unmappedInvoices,
+  }
+}
+
 function buildPaperworkTableRows(
   approvedOrders: StockOrdersLookupRecord[],
   invoiceRows: InvoiceDocumentRow[],
@@ -366,6 +465,8 @@ function buildPaperworkTableRows(
       sellCount: 0,
       boughtQuantity: 0,
       soldQuantity: 0,
+      buyGrossAmount: 0,
+      sellGrossAmount: 0,
       tradedGrossAmount: 0,
       orderCommission: 0,
       calculatedCommission: 0,
@@ -407,9 +508,11 @@ function buildPaperworkTableRows(
     if (side === 'buy') {
       row.buyCount += 1
       row.boughtQuantity += quantity
+      row.buyGrossAmount += grossAmount
     } else if (side === 'sell') {
       row.sellCount += 1
       row.soldQuantity += quantity
+      row.sellGrossAmount += grossAmount
     }
   }
 
@@ -540,6 +643,8 @@ function makeGroupRow(input: {
       accumulator.sellCount += child.sellCount
       accumulator.boughtQuantity += child.boughtQuantity
       accumulator.soldQuantity += child.soldQuantity
+      accumulator.buyGrossAmount += child.buyGrossAmount
+      accumulator.sellGrossAmount += child.sellGrossAmount
       accumulator.tradedGrossAmount += child.tradedGrossAmount
       accumulator.orderCommission += child.orderCommission
       accumulator.calculatedCommission += child.calculatedCommission
@@ -563,6 +668,8 @@ function makeGroupRow(input: {
       sellCount: 0,
       boughtQuantity: 0,
       soldQuantity: 0,
+      buyGrossAmount: 0,
+      sellGrossAmount: 0,
       tradedGrossAmount: 0,
       orderCommission: 0,
       calculatedCommission: 0,
@@ -579,6 +686,60 @@ function makeGroupRow(input: {
       children: input.children,
     },
   )
+}
+
+function filterSymbolTableRowByYear(
+  row: PaperworkTableRow,
+  year: string,
+  rowsBySymbol: Map<string, PaperworkAnalyticsRow>,
+) {
+  const matchingYears = row.children.filter((child) => child.scope === 'year' && child.year === year)
+  if (matchingYears.length === 0) {
+    return null
+  }
+
+  const baseRow = rowsBySymbol.get(row.label)
+  return {
+    ...makeGroupRow({
+      id: `${row.id}-${year}`,
+      label: row.label,
+      scope: 'symbol',
+      year,
+      month: null,
+      children: matchingYears,
+    }),
+    averageCost: baseRow?.averageCost ?? null,
+    openQuantity: baseRow?.openQuantity ?? 0,
+    closePrice: baseRow?.closePrice ?? null,
+    mtmPnl: baseRow?.mtmPnl ?? null,
+  }
+}
+
+function toAnalyticsRowFromTableRow(row: PaperworkTableRow, baseRow: PaperworkAnalyticsRow | undefined): PaperworkAnalyticsRow {
+  return {
+    symbol: row.label,
+    orderCount: row.orderCount,
+    invoiceCount: row.invoiceCount,
+    buyCount: row.buyCount,
+    sellCount: row.sellCount,
+    boughtQuantity: row.boughtQuantity,
+    soldQuantity: row.soldQuantity,
+    buyGrossAmount: row.buyGrossAmount,
+    sellGrossAmount: row.sellGrossAmount,
+    tradedGrossAmount: row.tradedGrossAmount,
+    orderCommission: row.orderCommission,
+    calculatedCommission: row.calculatedCommission,
+    invoiceBaseAmount: row.invoiceBaseAmount,
+    invoiceTaxAmount: row.invoiceTaxAmount,
+    invoiceTotalAmount: row.invoiceTotalAmount,
+    feeGap: row.feeGap,
+    realizedPnl: row.realizedPnl,
+    openQuantity: baseRow?.openQuantity ?? 0,
+    averageCost: baseRow?.averageCost ?? null,
+    closePrice: baseRow?.closePrice ?? null,
+    remainingBuyCommission: baseRow?.remainingBuyCommission ?? 0,
+    mtmPnl: baseRow?.mtmPnl ?? null,
+  }
 }
 
 export function inferInvoiceSymbol(
@@ -1252,6 +1413,11 @@ function toCalendarMonth(value: string | null | undefined) {
   return normalized ? normalized.slice(0, 7) : null
 }
 
+function toCalendarYear(value: string | null | undefined) {
+  const normalized = normalizeText(value)
+  return normalized ? normalized.slice(0, 4) : null
+}
+
 function formatSignedAmount(value: number) {
   const rounded = Math.round(value)
   return `${rounded >= 0 ? '+' : ''}${rounded.toLocaleString('en-US')}`
@@ -1289,6 +1455,11 @@ function getCurrentBogotaYear() {
     timeZone: 'America/Bogota',
     year: 'numeric',
   }).format(new Date())
+}
+
+function normalizePaperworkYear(value: string | null) {
+  const normalized = normalizeText(value)
+  return normalized && /^\d{4}$/.test(normalized) ? normalized : null
 }
 
 function formatMonthName(value: string) {

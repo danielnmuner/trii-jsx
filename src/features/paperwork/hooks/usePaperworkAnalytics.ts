@@ -3,7 +3,12 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import { fetchDailyClosingSnapshots } from '../../analytics/api/client'
 import { fetchInvoicesByIssuedMonth, fetchStockOrdersByCreatedMonth } from '../api/client'
 import type { ParsedInvoiceLookupRecord, StockOrdersLookupRecord } from '../api/schemas'
-import { buildPaperworkAnalytics, type PaperworkAnalyticsModel } from '../lib/analytics'
+import {
+  buildPaperworkAnalytics,
+  derivePaperworkAvailableYears,
+  filterPaperworkAnalyticsByYear,
+  type PaperworkAnalyticsModel,
+} from '../lib/analytics'
 
 const PAPERWORK_ANALYTICS_STALE_MS = Number.POSITIVE_INFINITY
 const PAPERWORK_ANALYTICS_GC_MS = Number.POSITIVE_INFINITY
@@ -13,13 +18,15 @@ const PAPERWORK_EMPTY_RUN_STOP = 6
 
 export type PaperworkAnalyticsQueryResult = {
   model: PaperworkAnalyticsModel
+  fullModel: PaperworkAnalyticsModel
+  availableYears: string[]
   isLoading: boolean
   isFetching: boolean
   isError: boolean
   error: unknown
 }
 
-export function usePaperworkAnalytics(userEmail: string | null): PaperworkAnalyticsQueryResult {
+export function usePaperworkAnalytics(userEmail: string | null, selectedYear: string | null): PaperworkAnalyticsQueryResult {
   const ordersHistoryQuery = useQuery({
     queryKey: ['paperwork', 'orders', 'history', userEmail],
     queryFn: () => fetchAllOrderHistory(userEmail ?? ''),
@@ -78,15 +85,19 @@ export function usePaperworkAnalytics(userEmail: string | null): PaperworkAnalyt
       return accumulator
     }, {})
 
-    const model = buildPaperworkAnalytics({
+    const fullModel = buildPaperworkAnalytics({
       ordersMonthRecords,
       invoicesMonthRecords,
       symbolOrderHistoryBySymbol,
       latestClosingPriceBySymbol,
     })
+    const availableYears = derivePaperworkAvailableYears(fullModel)
+    const model = filterPaperworkAnalyticsByYear(fullModel, selectedYear)
 
     return {
       model,
+      fullModel,
+      availableYears,
       isLoading:
         ordersHistoryQuery.isLoading ||
         invoicesHistoryQuery.isLoading ||
@@ -105,7 +116,7 @@ export function usePaperworkAnalytics(userEmail: string | null): PaperworkAnalyt
         dailyClosingQueries.find((query) => query.error)?.error ??
         null,
     }
-  }, [dailyClosingQueries, invoicesHistoryQuery.error, invoicesHistoryQuery.isError, invoicesHistoryQuery.isFetching, invoicesHistoryQuery.isLoading, invoicesMonthRecords, ordersHistoryQuery.error, ordersHistoryQuery.isError, ordersHistoryQuery.isFetching, ordersHistoryQuery.isLoading, ordersMonthRecords, trackedSymbols])
+  }, [dailyClosingQueries, invoicesHistoryQuery.error, invoicesHistoryQuery.isError, invoicesHistoryQuery.isFetching, invoicesHistoryQuery.isLoading, invoicesMonthRecords, ordersHistoryQuery.error, ordersHistoryQuery.isError, ordersHistoryQuery.isFetching, ordersHistoryQuery.isLoading, ordersMonthRecords, selectedYear, trackedSymbols])
 }
 
 async function fetchAllOrderHistory(userEmail: string) {

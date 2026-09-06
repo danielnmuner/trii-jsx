@@ -14,9 +14,11 @@ type NoticeState = {
 type PaperworkPanelProps = {
   authenticatedUserEmail: string | null
   analyticsQuery: PaperworkAnalyticsQueryResult
+  selectedYear: string | null
+  onYearChange: (year: string) => void
 }
 
-export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery }: PaperworkPanelProps) {
+export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selectedYear, onYearChange }: PaperworkPanelProps) {
   const queryClient = useQueryClient()
   const [ordersFile, setOrdersFile] = useState<File | null>(null)
   const [ordersResult, setOrdersResult] = useState<StockOrdersUploadResult | null>(null)
@@ -102,7 +104,7 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery }: Paper
   return (
     <section className="paperwork-grid" aria-label="Paperwork workspace">
       <div className="paperwork-column paperwork-column--intake">
-        <PaperworkAnalyticsPanel analyticsQuery={analyticsQuery} />
+        <PaperworkAnalyticsPanel analyticsQuery={analyticsQuery} selectedYear={selectedYear} onYearChange={onYearChange} />
 
         <article className="paperwork-card paperwork-card--intake">
           <header className="paperwork-card__header">

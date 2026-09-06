@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react'
-import { buildPaperworkLoginUrl, buildPaperworkLogoutUrl } from '../auth/client'
+import { buildPaperworkLoginUrl } from '../auth/client'
 import type { PaperworkAuthSession } from '../auth/schemas'
-import type { PaperworkAnalyticsQueryResult } from '../hooks/usePaperworkAnalytics'
 
 type PaperworkAccessGateProps = {
   session: PaperworkAuthSession | undefined
   isLoading: boolean
   errorMessage: string | null
-  analyticsQuery: PaperworkAnalyticsQueryResult
   children: ReactNode
 }
 
@@ -26,7 +24,7 @@ function GitHubMark() {
 }
 
 export function PaperworkAccessGate(props: PaperworkAccessGateProps) {
-  const { session, isLoading, errorMessage, analyticsQuery, children } = props
+  const { session, isLoading, errorMessage, children } = props
 
   if (isLoading) {
     return (
@@ -60,32 +58,6 @@ export function PaperworkAccessGate(props: PaperworkAccessGateProps) {
   }
 
   return (
-    <section className="paperwork-auth">
-      <div className="paperwork-authBar">
-        <div className="paperwork-authBar__metrics" aria-label="Paperwork summary">
-          <div className="paperwork-authBar__metric">
-            <span>Bruto</span>
-            <strong>{formatMoney(analyticsQuery.model.summary.tradedGrossAmount)}</strong>
-          </div>
-          <div className="paperwork-authBar__metric">
-            <span>Total factura</span>
-            <strong>{formatMoney(analyticsQuery.model.summary.invoiceTotalAmount)}</strong>
-          </div>
-          <div className="paperwork-authBar__metric">
-            <span>Impuesto</span>
-            <strong>{formatMoney(analyticsQuery.model.summary.invoiceTaxAmount)}</strong>
-          </div>
-        </div>
-        <a className="paperwork-authBar__logout" href={buildPaperworkLogoutUrl()}>
-          <GitHubMark />
-          Switch account
-        </a>
-      </div>
-      {children}
-    </section>
+    <section className="paperwork-auth">{children}</section>
   )
-}
-
-function formatMoney(value: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(value))
 }

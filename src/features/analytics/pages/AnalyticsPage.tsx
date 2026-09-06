@@ -16,14 +16,13 @@ import {
   useDailyClosingSnapshots,
 } from '../hooks/useAnalytics'
 import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTimeline'
-import { useOrderPositions } from '../hooks/useOrderPositions'
 import { usePaperworkAuth } from '../../paperwork/auth/usePaperworkAuth'
 import { PaperworkAccessGate } from '../../paperwork/components/PaperworkAccessGate'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { usePaperworkAnalytics } from '../../paperwork/hooks/usePaperworkAnalytics'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
-import { rankCoreSymbols, resolveAvailableQuantity, resolveOwnedInvestmentValue, type CoreSortIntent } from '../lib/coreSymbolSorting'
+import { rankCoreSymbols, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
 const topTabs = ['Overview', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
@@ -54,6 +53,7 @@ export function AnalyticsPage() {
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
   const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>(() => resolveInitialTopTab())
+  const [selectedPaperworkYear, setSelectedPaperworkYear] = useState<string | null>(null)
   const catalogReadySymbols = symbols.length > 0 ? symbols : []
   const orderedCatalogSymbols =
     symbolOrder.length > 0
@@ -72,10 +72,6 @@ export function AnalyticsPage() {
   const eligibleOverviewResults = useMemo(
     () => snapshotsQuery.results.filter((result) => resolveOverviewSampleCount(result) >= MIN_OVERVIEW_SAMPLE_COUNT),
     [snapshotsQuery.results],
-  )
-  const orderPositionsQuery = useOrderPositions(
-    eligibleOverviewResults.map((result) => result.current_snapshot),
-    activeTab === 'Overview',
   )
   const rankedSymbolOrder = useMemo(
     () =>
@@ -181,7 +177,22 @@ export function AnalyticsPage() {
   const paperworkAuthQuery = usePaperworkAuth(activeTab === 'Paperwork')
   const paperworkAnalyticsQuery = usePaperworkAnalytics(
     activeTab === 'Paperwork' ? paperworkAuthQuery.data?.user?.email ?? null : null,
+    selectedPaperworkYear,
   )
+
+  useEffect(() => {
+    const [latestYear] = paperworkAnalyticsQuery.availableYears
+    if (!latestYear) {
+      if (selectedPaperworkYear !== null) {
+        setSelectedPaperworkYear(null)
+      }
+      return
+    }
+
+    if (!selectedPaperworkYear || !paperworkAnalyticsQuery.availableYears.includes(selectedPaperworkYear)) {
+      setSelectedPaperworkYear(latestYear)
+    }
+  }, [paperworkAnalyticsQuery.availableYears, selectedPaperworkYear])
 
   const eligibleOverviewSymbolSet = useMemo(
     () => new Set(orderedEligibleOverviewResults.map((result) => result.symbol)),
@@ -191,25 +202,6 @@ export function AnalyticsPage() {
   const coreVisibleSymbols = useMemo(
     () => rankedSymbolOrder.filter((symbol) => eligibleOverviewSymbolSet.has(symbol)),
     [rankedSymbolOrder, eligibleOverviewSymbolSet],
-  )
-  const coreOwnedSymbols = useMemo(
-    () =>
-      [...coreVisibleSymbols]
-        .filter((symbol) => {
-          const positionSummary = orderPositionsQuery.bySymbol[symbol]
-          if (positionSummary) {
-            return positionSummary.availableQuantity > 0
-          }
-
-          const snapshot = snapshotsQuery.results.find((result) => result.symbol === symbol)?.current_snapshot
-          return resolveAvailableQuantity(snapshot, undefined) > 0
-        })
-        .sort(
-          (left, right) =>
-            resolveOwnedInvestmentValue(orderPositionsQuery.bySymbol[right]) -
-            resolveOwnedInvestmentValue(orderPositionsQuery.bySymbol[left]),
-        ),
-    [coreVisibleSymbols, orderPositionsQuery.bySymbol, snapshotsQuery.results],
   )
 
   const coreLatestBySymbol = useMemo(
@@ -258,24 +250,6 @@ export function AnalyticsPage() {
       const hiddenSymbols = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
       return [...nextVisibleOrder, ...hiddenSymbols]
     })
-  }
-
-  const handleOwnedSymbolsSelect = () => {
-    if (coreOwnedSymbols.length === 0) {
-      return
-    }
-
-    setSymbolOrder((current) => {
-      const visibleSymbols = coreVisibleSymbols
-      const ownedSet = new Set(coreOwnedSymbols)
-      const orderedVisibleSymbols = [
-        ...coreOwnedSymbols,
-        ...visibleSymbols.filter((symbol) => !ownedSet.has(symbol)),
-      ]
-      const hiddenSymbols = current.filter((symbol) => !eligibleOverviewSymbolSet.has(symbol))
-      return [...orderedVisibleSymbols, ...hiddenSymbols]
-    })
-    setCoreSortIntent('manual')
   }
 
   const handleCoreSortIntentChange = (nextIntent: CoreSortIntent) => {
@@ -395,13 +369,11 @@ export function AnalyticsPage() {
           />
         }
         orderedSymbols={coreVisibleSymbols}
-        ownedSymbols={coreOwnedSymbols}
         latestBySymbol={coreLatestBySymbol}
         symbols={coreVisibleSymbols}
         sortIntent={coreSortIntent}
         onSymbolOrderChange={handleCoreSymbolOrderChange}
         onSortIntentChange={handleCoreSortIntentChange}
-        onOwnedSymbolsSelect={handleOwnedSymbolsSelect}
       />
 
       {catalogQuery.isError && !hasCatalogData ? (
@@ -472,11 +444,12 @@ export function AnalyticsPage() {
             session={paperworkAuthQuery.data}
             isLoading={paperworkAuthQuery.isLoading}
             errorMessage={paperworkAuthQuery.data?.message ?? resolvePaperworkAuthMessage(paperworkAuthQuery.error)}
-            analyticsQuery={paperworkAnalyticsQuery}
           >
             <PaperworkPanel
               authenticatedUserEmail={paperworkAuthQuery.data?.user?.email ?? null}
               analyticsQuery={paperworkAnalyticsQuery}
+              selectedYear={selectedPaperworkYear}
+              onYearChange={setSelectedPaperworkYear}
             />
           </PaperworkAccessGate>
         ) : null}

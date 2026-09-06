@@ -1,16 +1,83 @@
 import { useMemo } from 'react'
 import { DataTable } from '../../../shared/ui/DataTable'
+import { buildPaperworkLogoutUrl } from '../auth/client'
 import type { PaperworkAnalyticsQueryResult } from '../hooks/usePaperworkAnalytics'
 import { TRII_PRO_COMMISSION_RATE, VAT_RATE } from '../lib/analytics'
 import { PaperworkExpandableTable } from './PaperworkExpandableTable'
 
 type PaperworkAnalyticsPanelProps = {
   analyticsQuery: PaperworkAnalyticsQueryResult
+  selectedYear: string | null
+  onYearChange: (year: string) => void
 }
 
-export function PaperworkAnalyticsPanel({ analyticsQuery }: PaperworkAnalyticsPanelProps) {
+export function PaperworkAnalyticsPanel({ analyticsQuery, selectedYear, onYearChange }: PaperworkAnalyticsPanelProps) {
+  const monthlyOperationCards = useMemo(() => {
+    const monthsByKey = new Map<string, {
+      key: string
+      month: string
+      tradedGrossAmount: number
+      buyGrossAmount: number
+      sellGrossAmount: number
+      realizedPnl: number
+      invoiceTaxAmount: number
+      invoiceTotalAmount: number
+      buyCount: number
+      sellCount: number
+    }>()
+
+    for (const symbolRow of analyticsQuery.model.tableRows) {
+      for (const yearRow of symbolRow.children) {
+        for (const monthRow of yearRow.children) {
+          const key = monthRow.month ?? `${yearRow.year}-${monthRow.label}`
+          const current = monthsByKey.get(key) ?? {
+            key,
+            month: monthRow.label,
+            tradedGrossAmount: 0,
+            buyGrossAmount: 0,
+            sellGrossAmount: 0,
+            realizedPnl: 0,
+            invoiceTaxAmount: 0,
+            invoiceTotalAmount: 0,
+            buyCount: 0,
+            sellCount: 0,
+          }
+
+          current.tradedGrossAmount += monthRow.tradedGrossAmount
+          current.buyGrossAmount += monthRow.buyGrossAmount
+          current.sellGrossAmount += monthRow.sellGrossAmount
+          current.realizedPnl += monthRow.realizedPnl
+          current.invoiceTaxAmount += monthRow.invoiceTaxAmount
+          current.invoiceTotalAmount += monthRow.invoiceTotalAmount
+          current.buyCount += monthRow.buyCount
+          current.sellCount += monthRow.sellCount
+          monthsByKey.set(key, current)
+        }
+      }
+    }
+
+    return Array.from(monthsByKey.values()).sort((left, right) => right.key.localeCompare(left.key))
+  }, [analyticsQuery.model.tableRows])
+
+  const operationCards = useMemo(() => {
+    const annualCard = {
+      key: `${selectedYear ?? 'all'}-total`,
+      month: selectedYear ? `${selectedYear} Total` : 'Total',
+      tradedGrossAmount: monthlyOperationCards.reduce((sum, card) => sum + card.tradedGrossAmount, 0),
+      buyGrossAmount: monthlyOperationCards.reduce((sum, card) => sum + card.buyGrossAmount, 0),
+      sellGrossAmount: monthlyOperationCards.reduce((sum, card) => sum + card.sellGrossAmount, 0),
+      realizedPnl: monthlyOperationCards.reduce((sum, card) => sum + card.realizedPnl, 0),
+      invoiceTaxAmount: monthlyOperationCards.reduce((sum, card) => sum + card.invoiceTaxAmount, 0),
+      invoiceTotalAmount: monthlyOperationCards.reduce((sum, card) => sum + card.invoiceTotalAmount, 0),
+      buyCount: monthlyOperationCards.reduce((sum, card) => sum + card.buyCount, 0),
+      sellCount: monthlyOperationCards.reduce((sum, card) => sum + card.sellCount, 0),
+    }
+
+    return [annualCard, ...monthlyOperationCards]
+  }, [monthlyOperationCards, selectedYear])
+
   const currentPortfolio = useMemo(() => {
-    const holdings = analyticsQuery.model.rows
+    const holdings = analyticsQuery.fullModel.rows
       .filter((row) => row.openQuantity > 0 && row.closePrice !== null && row.averageCost !== null)
       .map((row) => {
         const marketValue = row.openQuantity * (row.closePrice ?? 0)
@@ -51,7 +118,7 @@ export function PaperworkAnalyticsPanel({ analyticsQuery }: PaperworkAnalyticsPa
       totalPnlPercent,
       issuerCount: holdings.length,
     }
-  }, [analyticsQuery.model.rows])
+  }, [analyticsQuery.fullModel.rows])
 
   const unmappedRows = useMemo(() => {
     return analyticsQuery.model.unmappedInvoices.slice(0, 10).map((row) => ({
@@ -119,11 +186,16 @@ export function PaperworkAnalyticsPanel({ analyticsQuery }: PaperworkAnalyticsPa
     <article className="paperwork-card">
       <header className="paperwork-card__header paperwork-card__header--analytics">
         <div className="paperwork-card__copy paperwork-card__copy--compact">
-          <span className="paperwork-card__eyebrow">Analitica</span>
+          <div className="paperwork-analytics__headerMeta">
+            <span className="paperwork-card__eyebrow">Analitica</span>
+            <span className={`paperwork-analytics__status paperwork-analytics__status--${status.tone}`}>{status.label}</span>
+          </div>
         </div>
 
         <div className="paperwork-analytics__toolbar">
-          <span className={`paperwork-analytics__status paperwork-analytics__status--${status.tone}`}>{status.label}</span>
+          <a className="paperwork-analytics__switch" href={buildPaperworkLogoutUrl()}>
+            Switch account
+          </a>
         </div>
       </header>
 
@@ -138,6 +210,30 @@ export function PaperworkAnalyticsPanel({ analyticsQuery }: PaperworkAnalyticsPa
           {`Se detectaron ${formatInteger(analyticsQuery.model.summary.unmappedInvoiceCount)} factura(s) sin mapeo. Agrega el alias faltante en invoiceSymbolMap.ts.`}
           {unmappedExamples.length > 0 ? ` Ejemplos: ${unmappedExamples.join(' | ')}` : ''}
         </div>
+      ) : null}
+
+      {monthlyOperationCards.length > 0 ? (
+        <section className="paperwork-section">
+          {analyticsQuery.availableYears.length > 0 ? (
+            <div className="paperwork-yearFilter" aria-label="Filtro anual de paperwork">
+              {analyticsQuery.availableYears.map((year) => (
+                <button
+                  key={year}
+                  type="button"
+                  className={`paperwork-yearFilter__button${selectedYear === year ? ' is-active' : ''}`}
+                  onClick={() => onYearChange(year)}
+                  aria-pressed={selectedYear === year}
+                >
+                  {year}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="paperwork-section__header">
+            <h4>Operacion por mes</h4>
+          </div>
+          <MonthlyOperationCards cards={operationCards} />
+        </section>
       ) : null}
 
       <section className="paperwork-section">
@@ -182,6 +278,60 @@ export function PaperworkAnalyticsPanel({ analyticsQuery }: PaperworkAnalyticsPa
         </section>
       ) : null}
     </article>
+  )
+}
+
+function MonthlyOperationCards(props: {
+  cards: Array<{
+    key: string
+    month: string
+    tradedGrossAmount: number
+    buyGrossAmount: number
+    sellGrossAmount: number
+    realizedPnl: number
+    invoiceTaxAmount: number
+    invoiceTotalAmount: number
+    buyCount: number
+    sellCount: number
+  }>
+}) {
+  return (
+    <div className="paperwork-monthCards">
+      {props.cards.map((card) => (
+        <article key={card.key} className="paperwork-monthCard">
+          <header className="paperwork-monthCard__header">
+            <strong>{card.month}</strong>
+            <span>{`${formatInteger(card.buyCount)}C / ${formatInteger(card.sellCount)}V`}</span>
+          </header>
+          <div className="paperwork-monthCard__grid">
+            <div className="paperwork-monthCard__metric">
+              <span>Bruto movido</span>
+              <strong>{formatMoney(card.tradedGrossAmount)}</strong>
+            </div>
+            <div className="paperwork-monthCard__metric paperwork-monthCard__metric--total">
+              <span>Total factura</span>
+              <strong>{formatMoney(card.invoiceTotalAmount)}</strong>
+            </div>
+            <div className="paperwork-monthCard__metric paperwork-monthCard__metric--buy">
+              <span>Compra</span>
+              <strong>{formatMoney(card.buyGrossAmount)}</strong>
+            </div>
+            <div className="paperwork-monthCard__metric paperwork-monthCard__metric--sell">
+              <span>Venta</span>
+              <strong>{formatMoney(card.sellGrossAmount)}</strong>
+            </div>
+            <div className="paperwork-monthCard__metric paperwork-monthCard__metric--tax">
+              <span>Impuesto</span>
+              <strong>{formatMoney(card.invoiceTaxAmount)}</strong>
+            </div>
+            <div className="paperwork-monthCard__metric paperwork-monthCard__metric--pnl">
+              <span>Utilidad</span>
+              <strong className={toneClassName(card.realizedPnl)}>{formatSignedMoney(card.realizedPnl)}</strong>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
   )
 }
 

@@ -3379,8 +3379,7 @@ button {
 
 .paperwork-monthCards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(218px, 218px));
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
   gap: 7px;
 }
 
@@ -3421,8 +3420,8 @@ button {
 .paperwork-monthCard {
   display: grid;
   gap: 6px;
-  width: 218px;
-  max-width: 100%;
+  width: 100%;
+  min-width: 0;
   padding: 8px 8px 9px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -3445,6 +3444,7 @@ button {
   align-items: baseline;
   justify-content: space-between;
   gap: 5px;
+  min-width: 0;
 }
 
 .paperwork-monthCard__header strong,
@@ -3459,6 +3459,7 @@ button {
   color: rgba(245, 248, 252, 0.94);
   font-size: 0.58rem;
   letter-spacing: 0.12em;
+  min-width: 0;
 }
 
 .paperwork-monthCard__header span {
@@ -3466,12 +3467,12 @@ button {
   font-size: 0.34rem;
   letter-spacing: 0.12em;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .paperwork-monthCard__grid {
   display: grid;
-  grid-template-columns: repeat(2, max-content);
-  justify-content: space-between;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 12px;
 }
 
@@ -3493,7 +3494,8 @@ button {
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.02;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .paperwork-monthCard__metric strong.paperwork-expandTable__value--positive {
@@ -3526,17 +3528,13 @@ button {
 
 @media (max-width: 1680px) {
   .paperwork-monthCards {
-    grid-template-columns: repeat(auto-fit, minmax(210px, 210px));
-  }
-
-  .paperwork-monthCard {
-    width: 210px;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
 }
 
 @media (max-width: 1480px) {
   .paperwork-monthCards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -5875,6 +5873,7 @@ button {
 
   .paperwork-monthCards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .paperwork-portfolio {
@@ -6123,11 +6122,11 @@ button {
 
   .paperwork-monthCard {
     width: 100%;
+    padding: 8px;
   }
 
   .paperwork-monthCard__grid {
-    grid-template-columns: repeat(2, max-content);
-    justify-content: space-between;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 10px;
   }
 

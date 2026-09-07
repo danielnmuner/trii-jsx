@@ -327,21 +327,25 @@ function flattenSessionVectorPoints(dataset?: SessionVectorWindow | null) {
   const byIndex = new Map<number, SessionVectorPoint>()
 
   for (const segment of dataset.segments) {
+    const expectedLength = Math.max((segment.to_sample_index ?? segment.from_sample_index) - segment.from_sample_index + 1, 0)
     const seriesLength = Math.max(
       segment.microprice_series.length,
       segment.last_price_series.length,
       segment.mid_price_series.length,
       segment.vwap_series.length,
     )
+    const normalizedLength = expectedLength > 0 ? Math.min(seriesLength, expectedLength) : seriesLength
+    const leadingPadding = Math.max(seriesLength - normalizedLength, 0)
 
-    for (let offset = 0; offset < seriesLength; offset += 1) {
+    for (let offset = 0; offset < normalizedLength; offset += 1) {
+      const sourceIndex = offset + leadingPadding
       const index = segment.from_sample_index + offset
       byIndex.set(index, {
         index,
-        lastPrice: sanitizeNumber(segment.last_price_series[offset]),
-        microPrice: sanitizeNumber(segment.microprice_series[offset]),
-        midPrice: sanitizeNumber(segment.mid_price_series[offset]),
-        vwap: sanitizeNumber(segment.vwap_series[offset]),
+        lastPrice: sanitizeNumber(segment.last_price_series[sourceIndex]),
+        microPrice: sanitizeNumber(segment.microprice_series[sourceIndex]),
+        midPrice: sanitizeNumber(segment.mid_price_series[sourceIndex]),
+        vwap: sanitizeNumber(segment.vwap_series[sourceIndex]),
       })
     }
   }

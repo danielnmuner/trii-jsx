@@ -1,5 +1,5 @@
 import type { AnalyticsSymbolFeed, DailyClosingRecord, ZscoreOpportunityRecord } from '../api/schemas'
-import { getBogotaDateKey, isBogotaTradingSessionInstant, isColombiaBusinessDateKey } from './colombiaBusinessCalendar'
+import { getBogotaDateKey, isBogotaBusinessInstant, isBogotaTradingSessionInstant, isColombiaBusinessDateKey } from './colombiaBusinessCalendar'
 
 export function isCleanAnalyticsCapture(value: string | Date) {
   return isBogotaTradingSessionInstant(value)
@@ -52,7 +52,9 @@ function buildCleanSnapshotTimeline(feed: AnalyticsSymbolFeed) {
   const uniqueSnapshots = new Map<string, AnalyticsSymbolFeed['current_snapshot']>()
 
   for (const snapshot of [feed.current_snapshot, feed.previous_snapshot, ...feed.snapshots]) {
-    if (!snapshot || !isCleanAnalyticsCapture(snapshot.captured_at)) {
+    // Overview should keep valid business-day snapshots even when the provider stamps them a few
+    // minutes after the official session close.
+    if (!snapshot || !isValidOverviewSnapshotCapture(snapshot.captured_at)) {
       continue
     }
 
@@ -66,6 +68,10 @@ function buildCleanSnapshotTimeline(feed: AnalyticsSymbolFeed) {
   return [...uniqueSnapshots.values()].sort(
     (left, right) => new Date(left.captured_at).getTime() - new Date(right.captured_at).getTime(),
   )
+}
+
+function isValidOverviewSnapshotCapture(value: string | Date) {
+  return isBogotaBusinessInstant(value)
 }
 
 function resolveSnapshotTradingDate(snapshot: AnalyticsSymbolFeed['current_snapshot']) {
@@ -95,7 +101,7 @@ export function resolveSessionVectorTradingDate(feed: AnalyticsSymbolFeed) {
     typeof feed.current_snapshot.trading_date === 'string' && feed.current_snapshot.trading_date.trim().length > 0
       ? feed.current_snapshot.trading_date
       : getBogotaDateKey(feed.current_snapshot.captured_at)
-  const tradingDate = policyTradingDate ?? snapshotTradingDate
+  const tradingDate = snapshotTradingDate ?? policyTradingDate
   if (!tradingDate || !isColombiaBusinessDateKey(tradingDate)) {
     return null
   }

@@ -6215,7 +6215,14 @@ button {
   .overview-tape__item--historic-liquidity {
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 8px 10px;
+    padding: 10px 12px 9px;
+    gap: 10px;
+  }
+
+  .overview-liquidity {
+    grid-template-columns: repeat(2, minmax(110px, 132px));
+    justify-content: center;
+    gap: 18px;
   }
 
   .overview-signal__row {
@@ -6450,6 +6457,21 @@ button {
   .overview-vessel__stage,
   .overview-vessel__scale {
     min-height: 116px;
+  }
+
+  .overview-liquidity {
+    grid-template-columns: repeat(2, minmax(102px, 120px));
+    justify-content: center;
+    gap: 14px;
+  }
+
+  .overview-vessel {
+    width: 100%;
+  }
+
+  .overview-vessel__scaleValue,
+  .overview-vessel__hoverValue {
+    font-size: 0.5rem;
   }
 
   .overview-vessel__pointer {
@@ -6748,27 +6770,28 @@ button {
   }
 
   .overview-liquidity {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(104px, 1fr));
     justify-items: center;
-    gap: 12px;
+    gap: 10px 8px;
   }
 
   .overview-vessel {
-    width: min(100%, 168px);
+    width: min(100%, 128px);
   }
 
   .overview-vessel__glass {
-    width: 14px;
+    width: 13px;
   }
 
   .overview-vessel__meter {
-    grid-template-columns: 38px 18px;
-    column-gap: 3px;
+    grid-template-columns: 36px 16px;
+    column-gap: 2px;
+    justify-content: center;
   }
 
   .overview-vessel__stage,
   .overview-vessel__scale {
-    min-height: 102px;
+    min-height: 84px;
   }
 
   .overview-vessel__pointer {
@@ -6783,6 +6806,16 @@ button {
 
   .overview-vessel__pointerLine {
     width: 5px;
+  }
+
+  .overview-vessel__reference--median {
+    left: -42px;
+    right: -6px;
+  }
+
+  .overview-vessel__scaleValue,
+  .overview-vessel__hoverValue {
+    font-size: 0.47rem;
   }
 
   .overview-signal__row {
@@ -6836,6 +6869,11 @@ button {
   .overview-card__title {
     flex-wrap: wrap;
     gap: 6px 10px;
+  }
+
+  .overview-tape__item--historic-liquidity {
+    gap: 9px;
+    padding: 9px 8px 8px;
   }
 
   .overview-card__headlineQuote {
@@ -7076,5 +7114,39 @@ button {
 
   .ui-table {
     min-width: 760px;
+  }
+}
+
+@media (max-width: 430px) {
+  .overview-liquidity {
+    grid-template-columns: repeat(2, minmax(96px, 1fr));
+    gap: 8px 6px;
+  }
+
+  .overview-vessel {
+    width: min(100%, 116px);
+  }
+
+  .overview-vessel__meter {
+    grid-template-columns: 33px 15px;
+  }
+
+  .overview-vessel__stage,
+  .overview-vessel__scale {
+    min-height: 78px;
+  }
+
+  .overview-vessel__glass {
+    width: 12px;
+  }
+
+  .overview-vessel__scaleValue,
+  .overview-vessel__hoverValue {
+    font-size: 0.44rem;
+  }
+
+  .overview-vessel__reference--median {
+    left: -38px;
+    right: -5px;
   }
 }

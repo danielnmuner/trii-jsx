@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { motion } from 'motion/react'
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { OverviewSessionVectorTile, type SessionVectorHoverSnapshot } from './OverviewSessionVectorTile'
@@ -12,9 +13,11 @@ import {
   computeCumulativeVwap,
   formatBandDelta,
   formatMetricValue,
+  formatNumber,
   formatPercentFromWhole,
   formatSampleCount,
 } from '../lib/formatters'
+import { useCachedDailyClosingLiquiditySummary } from '../lib/dailyClosingLiquidity'
 
 type OverviewPanelProps = {
   snapshots: AnalyticsSymbolFeed[]
@@ -138,14 +141,8 @@ function OverviewSnapshotCard({
   const tradedVolumeZScore = buildZScoreContext(currentStats.traded_volume)
   const tradedValueZScore = buildZScoreContext(currentStats.traded_value)
   const isCrossedBook = isBestBidCrossingAsk(current.best_bid_price, current.best_ask_price)
-
-  const topItems: TapeItemData[] = [
-    buildTacticalReadItem(current, currentStats, currentVwap, currentSpread, sessionHover),
-    {
-      key: 'session_vector',
-      className: 'overview-tape__item overview-tape__item--session-vector-slot',
-    },
-  ]
+  const tacticalReadItem = buildTacticalReadItem(current, currentStats, currentVwap, currentSpread, sessionHover)
+  const cachedDailyClosingLiquidity = useCachedDailyClosingLiquiditySummary(snapshot.symbol)
 
   return (
     <article className="overview-card">
@@ -231,23 +228,22 @@ function OverviewSnapshotCard({
 
       <div className="overview-tape overview-tape--microstructure" role="group" aria-label={`${snapshot.symbol} microstructure tape`}>
         <div className="overview-tape__row overview-tape__row--microstructure">
-          {topItems.map((item) =>
-            item.key === 'session_vector' ? (
-              <OverviewSessionVectorTile
-                key={item.key}
-                dataset={sessionVectorQuery.data}
-                referenceHigh={current.high_price ?? null}
-                referenceLow={current.low_price ?? null}
-                availableTradingDates={availableSessionVectorDates}
-                selectedTradingDate={activeSessionVectorDate}
-                onTradingDateChange={setSelectedSessionVectorDate}
-                isLoading={sessionVectorDaysQuery.isLoading || (sessionVectorQuery.isLoading && !sessionVectorQuery.data)}
-                onHoverChange={setSessionHover}
-              />
-            ) : (
-              <TapeItem key={item.key} item={item} />
-            ),
-          )}
+          <TapeItem item={tacticalReadItem} />
+          <HistoricLiquidityItem
+            summary={cachedDailyClosingLiquidity}
+            currentVolume={current.traded_volume}
+            currentValue={current.traded_value}
+          />
+          <OverviewSessionVectorTile
+            dataset={sessionVectorQuery.data}
+            referenceHigh={current.high_price ?? null}
+            referenceLow={current.low_price ?? null}
+            availableTradingDates={availableSessionVectorDates}
+            selectedTradingDate={activeSessionVectorDate}
+            onTradingDateChange={setSelectedSessionVectorDate}
+            isLoading={sessionVectorDaysQuery.isLoading || (sessionVectorQuery.isLoading && !sessionVectorQuery.data)}
+            onHoverChange={setSessionHover}
+          />
         </div>
       </div>
 
@@ -259,6 +255,240 @@ function OverviewSnapshotCard({
       </div>
     </article>
   )
+}
+
+function HistoricLiquidityItem({
+  summary,
+  currentVolume,
+  currentValue,
+}: {
+  summary: ReturnType<typeof useCachedDailyClosingLiquiditySummary>
+  currentVolume: number | null | undefined
+  currentValue: number | null | undefined
+}) {
+  return (
+    <section className="overview-tape__item overview-tape__item--historic-liquidity" aria-label="Historical traded volume and value">
+      <div className="overview-tape__eyebrow">
+        <span className="overview-tape__dot" />
+        <span className="overview-tape__label">Institutionality</span>
+      </div>
+      <div className="overview-liquidity">
+        <LiquidityVessel
+          label="T Vol"
+          metricKey="traded_volume"
+          currentValue={currentVolume}
+          medianValue={summary.tradedVolumeP50}
+          maxValue={summary.tradedVolumeMax}
+        />
+        <LiquidityVessel
+          label="T Val"
+          metricKey="traded_value"
+          currentValue={currentValue}
+          medianValue={summary.tradedValueP50}
+          maxValue={summary.tradedValueMax}
+        />
+      </div>
+    </section>
+  )
+}
+
+function LiquidityVessel({
+  label,
+  metricKey,
+  currentValue,
+  medianValue,
+  maxValue,
+}: {
+  label: 'T Vol' | 'T Val'
+  metricKey: 'traded_volume' | 'traded_value'
+  currentValue: number | null | undefined
+  medianValue: number | null
+  maxValue: number | null
+}) {
+  const fillPercent = deriveLiquidityPercent(currentValue, maxValue)
+  const medianPercent = deriveLiquidityPercent(medianValue, maxValue)
+  const hasScale = typeof maxValue === 'number' && Number.isFinite(maxValue) && maxValue > 0
+  const isAboveMedian =
+    typeof currentValue === 'number' &&
+    Number.isFinite(currentValue) &&
+    typeof medianValue === 'number' &&
+    Number.isFinite(medianValue) &&
+    currentValue >= medianValue
+  const scaleMarks = buildInstitutionalityScale(metricKey, maxValue, medianValue)
+  const hasMedian = typeof medianValue === 'number' && Number.isFinite(medianValue) && medianValue > 0
+  const [hoverValue, setHoverValue] = useState<string | null>(null)
+
+  return (
+    <section className={`overview-vessel${isAboveMedian ? ' overview-vessel--elevated' : ''}`} aria-label={`${label} institutionality gauge`}>
+      <div className="overview-vessel__meter">
+        {hasScale ? (
+          <div className="overview-vessel__scale" aria-label={`${label} scale`}>
+            {scaleMarks.map((mark) => (
+              <button
+                key={`${label}-${mark.key}`}
+                type="button"
+                className={`overview-vessel__scaleMark overview-vessel__scaleMark--${mark.tone}`}
+                style={{ bottom: `${mark.percent}%` }}
+                aria-label={`${label} scale ${mark.hoverTooltip}`}
+                onMouseEnter={() => setHoverValue(mark.hoverTooltip)}
+                onMouseLeave={() => setHoverValue(null)}
+                onFocus={() => setHoverValue(mark.hoverTooltip)}
+                onBlur={() => setHoverValue(null)}
+              >
+                {mark.label ? <span className="overview-vessel__scaleValue">{mark.label}</span> : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          className="overview-vessel__stage"
+          style={
+            {
+              '--liquidity-fill': `${fillPercent}%`,
+              '--liquidity-p50': `${medianPercent}%`,
+            } as CSSProperties
+          }
+        >
+          <div className={`overview-vessel__glass${hasScale ? '' : ' overview-vessel__glass--empty'}`}>
+            {hasScale ? (
+              <button
+                type="button"
+                className="overview-vessel__reference overview-vessel__reference--max"
+                aria-label={`${label} historical max ${formatLiquidityScalePrecise(metricKey, maxValue)}`}
+                onMouseEnter={() => setHoverValue(formatLiquidityScalePrecise(metricKey, maxValue))}
+                onMouseLeave={() => setHoverValue(null)}
+                onFocus={() => setHoverValue(formatLiquidityScalePrecise(metricKey, maxValue))}
+                onBlur={() => setHoverValue(null)}
+              />
+            ) : null}
+            {hasScale && hasMedian ? (
+              <button
+                type="button"
+                className="overview-vessel__reference overview-vessel__reference--median"
+                style={{ bottom: `${medianPercent}%` }}
+                aria-label={`${label} median ${formatLiquidityScalePrecise(metricKey, medianValue)}`}
+                onMouseEnter={() => setHoverValue(formatLiquidityScalePrecise(metricKey, medianValue))}
+                onMouseLeave={() => setHoverValue(null)}
+                onFocus={() => setHoverValue(formatLiquidityScalePrecise(metricKey, medianValue))}
+                onBlur={() => setHoverValue(null)}
+              />
+            ) : null}
+            <motion.div
+              className="overview-vessel__fill"
+              aria-hidden="true"
+              animate={{ height: `${fillPercent}%` }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            >
+              <motion.span
+                className="overview-vessel__wave overview-vessel__wave--back"
+                animate={{ x: ['5%', '-5%', '5%'], scaleX: [0.98, 1.04, 0.98] }}
+                transition={{ duration: 6.2, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
+              />
+              <motion.span
+                className="overview-vessel__wave overview-vessel__wave--front"
+                animate={{ x: ['-4%', '4%', '-4%'], scaleX: [1.03, 0.98, 1.03] }}
+                transition={{ duration: 4.4, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
+              />
+              <motion.span
+                className="overview-vessel__waveGlow"
+                animate={{ opacity: [0.3, 0.6, 0.3], x: ['-3%', '3%', '-3%'] }}
+                transition={{ duration: 5.2, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
+              />
+            </motion.div>
+          </div>
+          {hasScale ? (
+            <button
+              type="button"
+              className="overview-vessel__pointer"
+              style={{ bottom: `${fillPercent}%` }}
+              aria-label={`${label} current ${formatLiquidityScalePrecise(metricKey, currentValue)}`}
+              onMouseEnter={() => setHoverValue(formatLiquidityScalePrecise(metricKey, currentValue))}
+              onMouseLeave={() => setHoverValue(null)}
+              onFocus={() => setHoverValue(formatLiquidityScalePrecise(metricKey, currentValue))}
+              onBlur={() => setHoverValue(null)}
+            >
+              <span className="overview-vessel__pointerCap" />
+              <span className="overview-vessel__pointerLine" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="overview-vessel__footer">
+        <span className={`overview-vessel__hoverValue${hoverValue ? ' overview-vessel__hoverValue--active' : ''}`}>
+          {hoverValue ?? '\u00A0'}
+        </span>
+      </div>
+    </section>
+  )
+}
+
+function deriveLiquidityPercent(value: number | null | undefined, maxValue: number | null | undefined) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value) ||
+    maxValue === null ||
+    maxValue === undefined ||
+    Number.isNaN(maxValue) ||
+    maxValue <= 0
+  ) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, (value / maxValue) * 100))
+}
+
+function formatLiquidityScale(metricKey: 'traded_volume' | 'traded_value', value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'n/a'
+  }
+
+  if (metricKey === 'traded_value') {
+    return `${formatNumber(value / 1_000_000, 0)} M`
+  }
+
+  return `${formatNumber(value / 1_000, 0)} K`
+}
+
+function formatLiquidityScalePrecise(metricKey: 'traded_volume' | 'traded_value', value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'n/a'
+  }
+
+  if (metricKey === 'traded_value') {
+    return `${formatNumber(value / 1_000_000, 2)} M`
+  }
+
+  return `${formatNumber(value / 1_000, 2)} K`
+}
+
+function buildInstitutionalityScale(
+  metricKey: 'traded_volume' | 'traded_value',
+  maxValue: number | null,
+  _medianValue: number | null,
+) {
+  if (maxValue === null || !Number.isFinite(maxValue) || maxValue <= 0) {
+    return []
+  }
+
+  return Array.from({ length: 25 }, (_, index) => {
+    const ratio = index / 24
+    const value = maxValue * ratio
+    const percent = ratio * 100
+    return {
+      key: `scale-${index}`,
+      percent,
+      tooltip: formatLiquidityScale(metricKey, value),
+      hoverTooltip: formatLiquidityScalePrecise(metricKey, value),
+      label: index % 8 === 0 ? formatLiquidityScale(metricKey, value) : null,
+      tone:
+        index % 8 === 0
+          ? ('major' as const)
+          : index % 4 === 0
+            ? ('mid' as const)
+            : ('minor' as const),
+    }
+  })
 }
 
 function TapeItem({ item }: { item: TapeItemData }) {

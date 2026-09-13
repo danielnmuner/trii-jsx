@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import {
   fetchAnalyticsCatalog,
   fetchAnalyticsHistoricStats,
@@ -11,7 +12,12 @@ import {
   fetchSessionVectorSegments,
   fetchZscoreOpportunities,
 } from '../api/client'
-import { ANALYTICS_REALTIME_GC_MS, ANALYTICS_REALTIME_REFETCH_MS, ANALYTICS_REALTIME_STALE_MS } from '../config'
+import {
+  ANALYTICS_DAILY_CLOSING_CACHE_MS,
+  ANALYTICS_REALTIME_GC_MS,
+  ANALYTICS_REALTIME_REFETCH_MS,
+  ANALYTICS_REALTIME_STALE_MS,
+} from '../config'
 import type {
   AnalyticsSymbolFeed,
   DailyClosingRecord,
@@ -37,6 +43,12 @@ type SessionVectorWindow = {
   segmentCount: number
   manifest: SessionVectorManifest | null
   segments: SessionVectorSegment[]
+}
+
+export type DailyClosingWindow = {
+  symbol: string
+  recordCount: number
+  records: DailyClosingRecord[]
 }
 
 export function useAnalyticsCatalog() {
@@ -183,14 +195,7 @@ export function useDailyClosingSnapshots(symbols: string[], enabled = true) {
   const queries = useQueries({
     queries: symbols.map((symbol) => ({
       queryKey: ['analytics', 'daily-closing', symbol],
-      queryFn: async () => {
-        const response = await fetchDailyClosingSnapshots(symbol)
-        return {
-          symbol,
-          recordCount: response.result.record_count,
-          records: sortDailyClosingRecords(response.result.records),
-        }
-      },
+      queryFn: () => fetchDailyClosingWindow(symbol),
       refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
       refetchIntervalInBackground: true,
       staleTime: ANALYTICS_REALTIME_STALE_MS,
@@ -214,6 +219,19 @@ export function useDailyClosingSnapshots(symbols: string[], enabled = true) {
       error: queries.find((query) => query.error)?.error ?? null,
     }
   }, [queries])
+}
+
+export async function primeDailyClosingCache(queryClient: QueryClient, symbols: string[]) {
+  await Promise.allSettled(
+    symbols.map((symbol) =>
+      queryClient.prefetchQuery({
+        queryKey: ['analytics', 'daily-closing', symbol],
+        queryFn: () => fetchDailyClosingWindow(symbol),
+        staleTime: ANALYTICS_DAILY_CLOSING_CACHE_MS,
+        gcTime: ANALYTICS_DAILY_CLOSING_CACHE_MS,
+      }),
+    ),
+  )
 }
 
 export function useSessionVectorAvailableDays(symbol: string, tradingDateTo: string | null, enabled = true) {
@@ -326,6 +344,15 @@ function mergeZscoreWindowRecords(existingRecords: ZscoreOpportunityRecord[], in
   )
 
   return filterZscoreOpportunityRecords(sorted)
+}
+
+async function fetchDailyClosingWindow(symbol: string): Promise<DailyClosingWindow> {
+  const response = await fetchDailyClosingSnapshots(symbol)
+  return {
+    symbol,
+    recordCount: response.result.record_count,
+    records: sortDailyClosingRecords(response.result.records),
+  }
 }
 
 function normalizeSessionVectorWindow(result: {

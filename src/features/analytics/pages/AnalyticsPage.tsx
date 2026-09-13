@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   readAnalyticsSymbolOrder,
   writeAnalyticsSymbolOrder,
@@ -11,6 +12,7 @@ import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
 import { HistoricStatsPanel } from '../components/HistoricStatsPanel'
 import { OverviewPanel } from '../components/OverviewPanel'
 import {
+  primeDailyClosingCache,
   useAnalyticsCatalog,
   useAnalyticsSnapshots,
   useDailyClosingSnapshots,
@@ -53,6 +55,7 @@ function hasSevereCoverageLoss(loadedCount: number, requestedCount: number, mini
 }
 
 export function AnalyticsPage() {
+  const queryClient = useQueryClient()
   const catalogQuery = useAnalyticsCatalog()
   const symbols = catalogQuery.data?.result.symbols ?? []
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
@@ -169,6 +172,10 @@ export function AnalyticsPage() {
       }, []),
     [effectiveSelectedSymbols, eligibleOverviewResults],
   )
+  const overviewEligibleSymbols = useMemo(
+    () => orderedEligibleOverviewResults.map((result) => result.symbol),
+    [orderedEligibleOverviewResults],
+  )
   const orderedDailyClosingResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<typeof dailyClosingQuery.results>((ordered, symbol) => {
@@ -180,6 +187,15 @@ export function AnalyticsPage() {
       }, []),
     [dailyClosingQuery.results, effectiveSelectedSymbols],
   )
+
+  useEffect(() => {
+    if (activeTab !== 'Overview' || overviewEligibleSymbols.length === 0) {
+      return
+    }
+
+    void primeDailyClosingCache(queryClient, overviewEligibleSymbols)
+  }, [activeTab, overviewEligibleSymbols, queryClient])
+
   const paperworkAuthQuery = usePaperworkAuth(activeTab === 'Paperwork' || activeTab === 'Historic')
   const dailyOrderTimelineQuery = useDailyOrderPositionTimeline(
     orderedDailyClosingResults,

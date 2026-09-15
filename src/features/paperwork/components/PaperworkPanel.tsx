@@ -71,7 +71,10 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
         if (!sendRequested) {
           setOrdersNotice({
             tone: 'success',
-            text: 'The orders file passed validation and is ready to upload.',
+            text:
+              result.duplicateRowCount > 0
+                ? `The orders file passed validation. ${result.duplicateRowCount} duplicate source row(s) were ignored locally; ${result.recordCount} normalized row(s) remain ready to upload.`
+                : 'The orders file passed validation and is ready to upload.',
           })
           return
         }
@@ -85,7 +88,10 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
 
         setOrdersNotice({
           tone: 'success',
-          text: `Upload completed. Received ${response.result.received_records} rows, imported ${response.result.imported_records}, skipped ${response.result.duplicate_records} duplicates.`,
+          text:
+            result.duplicateRowCount > 0
+              ? `Upload completed. Ignored ${result.duplicateRowCount} duplicate source row(s) locally, sent ${result.recordCount} normalized row(s), imported ${response.result.imported_records}, and the backend skipped ${response.result.duplicate_records} stored duplicate(s).`
+              : `Upload completed. Received ${response.result.received_records} rows, imported ${response.result.imported_records}, skipped ${response.result.duplicate_records} duplicates.`,
         })
         await queryClient.invalidateQueries({
           queryKey: ['paperwork', 'orders', 'history', userEmail],
@@ -170,6 +176,8 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
             <>
               <div className="paperwork-metrics">
                 <MetricPill label="Valid rows" value={String(ordersResult.recordCount)} />
+                <MetricPill label="Source rows" value={String(ordersResult.sourceRowCount)} />
+                <MetricPill label="Ignored dupes" value={String(ordersResult.duplicateRowCount)} />
                 <MetricPill label="Symbols" value={String(ordersResult.symbols.length)} />
                 <MetricPill label="Timezone" value={ordersResult.timezone} />
               </div>
@@ -187,6 +195,12 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
                   <dt>Detected symbols</dt>
                   <dd>{ordersResult.symbols.join(', ')}</dd>
                 </div>
+                {ordersResult.duplicateRowCount > 0 ? (
+                  <div>
+                    <dt>Ignored duplicate lines</dt>
+                    <dd>{ordersResult.duplicateSourceLineNumbers.join(', ')}</dd>
+                  </div>
+                ) : null}
               </dl>
 
               <section className="paperwork-preview">

@@ -3,14 +3,14 @@ import { sha256Hex } from './crypto'
 
 const EXPECTED_STOCK_ORDER_COLUMNS = [
   'Fecha y hora',
-  'Símbolo de la acción',
+  'SÃ­mbolo de la acciÃ³n',
   'Tipo de orden',
   'Estado',
   'Acciones completadas',
   'Acciones pendientes',
-  'Precio por acción',
+  'Precio por acciÃ³n',
   'Total invertido',
-  'Valor comisión',
+  'Valor comisiÃ³n',
   'Total estimado',
 ] as const
 
@@ -30,7 +30,7 @@ const SPANISH_MONTHS: Record<string, number> = {
 }
 
 const SPANISH_DATETIME_PATTERN =
-  /^\s*(?<day>\d{1,2})\s+(?<month>[A-Za-záéíóúñÁÉÍÓÚÑ]{3,})\s+(?<year>\d{4}),\s+(?<hour>\d{1,2}):(?<minute>\d{2})\s+(?<meridiem>[ap])\.\s*m\.\s*$/i
+  /^\s*(?<day>\d{1,2})\s+(?<month>[A-Za-zÃ¡Ã©Ã­Ã³ÃºÃ±ÃÃ‰ÃÃ“ÃšÃ‘]{3,})\s+(?<year>\d{4}),\s+(?<hour>\d{1,2}):(?<minute>\d{2})\s+(?<meridiem>[ap])\.\s*m\.\s*$/i
 
 type StockOrderCsvColumn = (typeof EXPECTED_STOCK_ORDER_COLUMNS)[number]
 
@@ -46,8 +46,10 @@ export type StockOrderRecord = {
   order_side: 'buy' | 'sell'
   raw_status: string
   normalized_status: string
+  execution_status: string
   requested_quantity: number
   filled_quantity: number
+  unfilled_quantity: number
   pending_quantity: number
   price_per_share: string
   gross_amount: string
@@ -61,7 +63,10 @@ export type StockOrdersUploadResult = {
   storageName: string
   capturedAt: string
   timezone: string
+  sourceRowCount: number
   recordCount: number
+  duplicateRowCount: number
+  duplicateSourceLineNumbers: number[]
   symbols: string[]
   columns: string[]
   previewRows: Array<Record<string, string>>
@@ -95,14 +100,18 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
 
   const capturedAt = buildBogotaTimestamp()
   const sourceFileChecksum = await sha256Hex(rawBytes)
-  const records = await normalizeRows(rawRows, sourceFileChecksum)
+  const normalizedResult = await normalizeRows(rawRows, sourceFileChecksum)
+  const records = normalizedResult.records
   const symbols = Array.from(new Set(records.map((record) => record.symbol))).sort()
 
   return {
     storageName: `stock-order-${capturedAt.compact}-america-bogota-trii.csv`,
     capturedAt: capturedAt.iso,
     timezone: getBogotaTimezoneLabel(),
+    sourceRowCount: rawRows.length,
     recordCount: records.length,
+    duplicateRowCount: normalizedResult.duplicateSourceLineNumbers.length,
+    duplicateSourceLineNumbers: normalizedResult.duplicateSourceLineNumbers,
     symbols,
     columns,
     previewRows: records.slice(0, 10).map((record) => ({
@@ -110,8 +119,10 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
       symbol: record.symbol,
       order_side: record.order_side,
       status: record.normalized_status,
+      execution_status: record.execution_status,
       requested_quantity: String(record.requested_quantity),
       filled_quantity: String(record.filled_quantity),
+      unfilled_quantity: String(record.unfilled_quantity),
       pending_quantity: String(record.pending_quantity),
       price_per_share: record.price_per_share,
       gross_amount: record.gross_amount,
@@ -191,7 +202,7 @@ function validateColumns(columns: string[]) {
   }
 
   throw new Error(
-    `El CSV de órdenes no coincide con la estructura esperada de Trii; ${details.join('; ')}.`,
+    `El CSV de Ã³rdenes no coincide con la estructura esperada de Trii; ${details.join('; ')}.`,
   )
 }
 
@@ -205,20 +216,23 @@ function toRow(columns: StockOrderCsvColumn[], values: string[]): RawCsvRow {
 async function normalizeRows(rows: RawCsvRow[], sourceFileChecksum: string) {
   const records: StockOrderRecord[] = []
   const seenChecksums = new Set<string>()
+  const duplicateSourceLineNumbers: number[] = []
 
   for (const [index, row] of rows.entries()) {
     const record = await normalizeRow(row, sourceFileChecksum, index + 2)
     if (seenChecksums.has(record.record_checksum)) {
-      throw new Error(
-        'El CSV de movimientos contiene checksums duplicados dentro del mismo archivo; se rechaza el lote completo.',
-      )
+      duplicateSourceLineNumbers.push(index + 2)
+      continue
     }
 
     seenChecksums.add(record.record_checksum)
     records.push(record)
   }
 
-  return records
+  return {
+    records,
+    duplicateSourceLineNumbers,
+  }
 }
 
 async function normalizeRow(
@@ -227,7 +241,12 @@ async function normalizeRow(
   sourceLineNumber: number,
 ) {
   const createdAt = parseCreatedAt(row['Fecha y hora'])
-  const symbol = row['Símbolo de la acción'].trim().toUpperCase()
+  const symbol = row['SÃ­mbolo de la acciÃ³n'].trim().toUpperCase()
+  const normalizedStatus = normalizeStatus(row.Estado)
+  const requestedQuantity = parseRequestedQuantity(row['Acciones completadas'], row['Acciones pendientes'])
+  const filledQuantity = parseQuantity(row['Acciones completadas'])
+  const pendingQuantity = parseQuantity(row['Acciones pendientes'])
+  const unfilledQuantity = Math.max(requestedQuantity - filledQuantity, pendingQuantity)
 
   const record: Omit<StockOrderRecord, 'record_checksum'> = {
     source_file_checksum: sourceFileChecksum,
@@ -238,13 +257,15 @@ async function normalizeRow(
     symbol,
     order_side: normalizeOrderSide(row['Tipo de orden']),
     raw_status: row.Estado,
-    normalized_status: normalizeStatus(row.Estado),
-    requested_quantity: parseRequestedQuantity(row['Acciones completadas'], row['Acciones pendientes']),
-    filled_quantity: parseQuantity(row['Acciones completadas']),
-    pending_quantity: parseQuantity(row['Acciones pendientes']),
-    price_per_share: parseDecimalText(row['Precio por acción']),
+    normalized_status: normalizedStatus,
+    execution_status: deriveExecutionStatus(normalizedStatus, requestedQuantity, filledQuantity),
+    requested_quantity: requestedQuantity,
+    filled_quantity: filledQuantity,
+    unfilled_quantity: unfilledQuantity,
+    pending_quantity: pendingQuantity,
+    price_per_share: parseDecimalText(row['Precio por acciÃ³n']),
     gross_amount: parseDecimalText(row['Total invertido']),
-    commission_amount: parseDecimalText(row['Valor comisión']),
+    commission_amount: parseDecimalText(row['Valor comisiÃ³n']),
     net_amount: parseDecimalText(row['Total estimado']),
     currency: 'COP',
   }
@@ -262,7 +283,7 @@ function stripAccents(value: string) {
 function parseCreatedAt(rawValue: string) {
   const match = SPANISH_DATETIME_PATTERN.exec(rawValue)
   if (!match?.groups) {
-    throw new Error(`Fecha y hora inválida: ${rawValue}`)
+    throw new Error(`Fecha y hora invÃ¡lida: ${rawValue}`)
   }
 
   const monthKey = stripAccents(match.groups.month).slice(0, 3).toLowerCase()
@@ -302,7 +323,7 @@ function parseDecimalText(rawValue: string) {
   }
 
   if (!/^-?\d+(\.\d+)?$/.test(value)) {
-    throw new Error(`Valor numérico inválido: ${rawValue}`)
+    throw new Error(`Valor numÃ©rico invÃ¡lido: ${rawValue}`)
   }
 
   return value
@@ -339,6 +360,20 @@ function normalizeStatus(rawStatus: string) {
   }
 
   return mapping[rawStatus.trim().toLowerCase()] ?? 'unknown'
+}
+
+function deriveExecutionStatus(normalizedStatus: string, requestedQuantity: number, filledQuantity: number) {
+  if (normalizedStatus === 'approved') {
+    if (filledQuantity > 0 && requestedQuantity > filledQuantity) {
+      return 'approved_partial'
+    }
+
+    if (filledQuantity > 0) {
+      return 'approved_full'
+    }
+  }
+
+  return normalizedStatus
 }
 
 function normalizeOrderSide(rawValue: string): 'buy' | 'sell' {

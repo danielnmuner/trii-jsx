@@ -14,7 +14,7 @@ export async function submitStockOrders(input: {
 }) {
   const payload = await postJson('/orders', {
     file_name: input.fileName,
-    records: input.records,
+    records: input.records.map(({ execution_status, unfilled_quantity, ...record }) => record),
     source_file_checksum: input.sourceFileChecksum,
     user_name: input.userEmail,
   })

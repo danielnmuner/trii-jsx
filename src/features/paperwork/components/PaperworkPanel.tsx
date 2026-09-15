@@ -71,10 +71,16 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
         if (!sendRequested) {
           setOrdersNotice({
             tone: 'success',
+            text: buildOrdersValidationMessage(result),
+          })
+          return
+        }
+
+        if (result.recordCount === 0) {
+          setOrdersNotice({
+            tone: 'info',
             text:
-              result.duplicateRowCount > 0
-                ? `The orders file passed validation. ${result.duplicateRowCount} duplicate source row(s) were ignored locally; ${result.recordCount} normalized row(s) remain ready to upload.`
-                : 'The orders file passed validation and is ready to upload.',
+              'The file was validated, but there are no approved rows with executed quantity to upload. Cancelled, pending, rejected, or zero-fill rows were excluded locally.',
           })
           return
         }
@@ -88,10 +94,7 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
 
         setOrdersNotice({
           tone: 'success',
-          text:
-            result.duplicateRowCount > 0
-              ? `Upload completed. Ignored ${result.duplicateRowCount} duplicate source row(s) locally, sent ${result.recordCount} normalized row(s), imported ${response.result.imported_records}, and the backend skipped ${response.result.duplicate_records} stored duplicate(s).`
-              : `Upload completed. Received ${response.result.received_records} rows, imported ${response.result.imported_records}, skipped ${response.result.duplicate_records} duplicates.`,
+          text: buildOrdersUploadMessage(result, response.result.imported_records, response.result.duplicate_records, response.result.received_records),
         })
         await queryClient.invalidateQueries({
           queryKey: ['paperwork', 'orders', 'history', userEmail],
@@ -175,11 +178,12 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
           {ordersResult ? (
             <>
               <div className="paperwork-metrics">
-                <MetricPill label="Valid rows" value={String(ordersResult.recordCount)} />
+                <MetricPill label="Ready rows" value={String(ordersResult.recordCount)} />
                 <MetricPill label="Source rows" value={String(ordersResult.sourceRowCount)} />
+                <MetricPill label="Normalized rows" value={String(ordersResult.normalizedRowCount)} />
                 <MetricPill label="Ignored dupes" value={String(ordersResult.duplicateRowCount)} />
+                <MetricPill label="Ignored status" value={String(ordersResult.ignoredStatusRowCount)} />
                 <MetricPill label="Symbols" value={String(ordersResult.symbols.length)} />
-                <MetricPill label="Timezone" value={ordersResult.timezone} />
               </div>
 
               <dl className="paperwork-details">
@@ -193,7 +197,7 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
                 </div>
                 <div>
                   <dt>Detected symbols</dt>
-                  <dd>{ordersResult.symbols.join(', ')}</dd>
+                  <dd>{ordersResult.symbols.length > 0 ? ordersResult.symbols.join(', ') : 'None ready to upload'}</dd>
                 </div>
                 {ordersResult.duplicateRowCount > 0 ? (
                   <div>
@@ -201,12 +205,22 @@ export function PaperworkPanel({ authenticatedUserEmail, analyticsQuery, selecte
                     <dd>{ordersResult.duplicateSourceLineNumbers.join(', ')}</dd>
                   </div>
                 ) : null}
+                {ordersResult.ignoredStatusRowCount > 0 ? (
+                  <div>
+                    <dt>Ignored non-approved rows</dt>
+                    <dd>{ordersResult.ignoredStatusRowCount}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt>Timezone</dt>
+                  <dd>{ordersResult.timezone}</dd>
+                </div>
               </dl>
 
               <section className="paperwork-preview">
                 <div className="paperwork-preview__header">
                   <h4>Normalized preview</h4>
-                  <p>The first rows shown here are already mapped to the backend contract.</p>
+                  <p>Only approved rows with executed quantity are shown here before upload.</p>
                 </div>
                 <DataTable rows={ordersResult.previewRows} />
               </section>
@@ -237,4 +251,47 @@ function NoticeBanner({ notice }: { notice: Exclude<NoticeState, null> }) {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
+}
+
+function buildOrdersValidationMessage(result: StockOrdersUploadResult) {
+  const details = [
+    `${result.recordCount} row(s) are ready to upload`,
+  ]
+
+  if (result.duplicateRowCount > 0) {
+    details.push(`${result.duplicateRowCount} duplicate source row(s) were ignored locally`)
+  }
+
+  if (result.ignoredStatusRowCount > 0) {
+    details.push(
+      `${result.ignoredStatusRowCount} non-approved or zero-fill row(s) were excluded locally`,
+    )
+  }
+
+  return `The orders file passed validation. ${details.join('; ')}.`
+}
+
+function buildOrdersUploadMessage(
+  result: StockOrdersUploadResult,
+  importedRecords: number,
+  backendDuplicateRecords: number,
+  receivedRecords: number,
+) {
+  const details = [
+    `sent ${result.recordCount} row(s)`,
+    `backend received ${receivedRecords}`,
+    `imported ${importedRecords}`,
+  ]
+
+  if (result.duplicateRowCount > 0) {
+    details.push(`ignored ${result.duplicateRowCount} duplicate source row(s) locally`)
+  }
+
+  if (result.ignoredStatusRowCount > 0) {
+    details.push(`excluded ${result.ignoredStatusRowCount} non-approved or zero-fill row(s) locally`)
+  }
+
+  details.push(`backend skipped ${backendDuplicateRecords} stored duplicate(s)`)
+
+  return `Upload completed. ${details.join(', ')}.`
 }

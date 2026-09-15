@@ -48,10 +48,12 @@ describe('parseStockOrdersCsv', () => {
     const result = await parseStockOrdersCsv(file)
 
     expect(result.sourceRowCount).toBe(3)
-    expect(result.recordCount).toBe(2)
+    expect(result.normalizedRowCount).toBe(2)
+    expect(result.recordCount).toBe(1)
     expect(result.duplicateRowCount).toBe(1)
+    expect(result.ignoredStatusRowCount).toBe(1)
     expect(result.duplicateSourceLineNumbers).toEqual([3])
-    expect(result.records.map((record) => record.symbol)).toEqual(['ECOPETROL', 'CIBEST'])
+    expect(result.records.map((record) => record.symbol)).toEqual(['CIBEST'])
   })
 
   it('marks partially executed approved rows and keeps only the filled quantity as executed', async () => {
@@ -73,8 +75,28 @@ describe('parseStockOrdersCsv', () => {
     expect(record?.filled_quantity).toBe(135)
     expect(record?.unfilled_quantity).toBe(45)
     expect(record?.pending_quantity).toBe(0)
+    expect(result.ignoredStatusRowCount).toBe(0)
     expect(result.previewRows[0]?.execution_status).toBe('approved_partial')
     expect(result.previewRows[0]?.filled_quantity).toBe('135')
     expect(result.previewRows[0]?.unfilled_quantity).toBe('45')
+  })
+
+  it('excludes cancelled rows from the uploadable output while keeping validation metadata', async () => {
+    const file = new File(
+      [
+        'Fecha y hora,SÃƒÂ­mbolo de la acciÃƒÂ³n,Tipo de orden,Estado,Acciones completadas,Acciones pendientes,Precio por acciÃƒÂ³n,Total invertido,Valor comisiÃƒÂ³n,Total estimado\n',
+        '"14 sept 2026, 8:32 a. m.",ECOPETROL,Venta,Cancelado,0,6000,2795,16770000,0,16770000\n',
+      ],
+      'cancelled-only.csv',
+      { type: 'text/csv' },
+    )
+
+    const result = await parseStockOrdersCsv(file)
+
+    expect(result.sourceRowCount).toBe(1)
+    expect(result.normalizedRowCount).toBe(1)
+    expect(result.recordCount).toBe(0)
+    expect(result.ignoredStatusRowCount).toBe(1)
+    expect(result.previewRows).toEqual([])
   })
 })

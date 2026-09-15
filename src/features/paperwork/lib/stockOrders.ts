@@ -50,8 +50,14 @@ const NORMALIZED_COLUMN_TO_KEY: Record<string, keyof typeof STOCK_ORDER_COLUMN_L
 
 const EXTRA_NORMALIZED_COLUMN_ALIASES: Record<string, keyof typeof STOCK_ORDER_COLUMN_LABELS> = {
   's mbolo de la acci n': 'symbol',
+  'sa a mbolo de la accia a n': 'symbol',
+  'sa a a mbolo de la accia a a n': 'symbol',
   'precio por acci n': 'pricePerShare',
+  'precio por accia a n': 'pricePerShare',
+  'precio por accia a a n': 'pricePerShare',
   'valor comisi n': 'commissionAmount',
+  'valor comisia a n': 'commissionAmount',
+  'valor comisia a a n': 'commissionAmount',
 }
 
 for (const [alias, key] of Object.entries(EXTRA_NORMALIZED_COLUMN_ALIASES)) {
@@ -108,8 +114,10 @@ export type StockOrdersUploadResult = {
   capturedAt: string
   timezone: string
   sourceRowCount: number
+  normalizedRowCount: number
   recordCount: number
   duplicateRowCount: number
+  ignoredStatusRowCount: number
   duplicateSourceLineNumbers: number[]
   symbols: string[]
   columns: string[]
@@ -145,7 +153,8 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
   const capturedAt = buildBogotaTimestamp()
   const sourceFileChecksum = await sha256Hex(rawBytes)
   const normalizedResult = await normalizeRows(rawRows, sourceFileChecksum)
-  const records = normalizedResult.records
+  const normalizedRecords = normalizedResult.records
+  const records = normalizedRecords.filter(isUploadableRecord)
   const symbols = Array.from(new Set(records.map((record) => record.symbol))).sort()
 
   return {
@@ -153,8 +162,10 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
     capturedAt: capturedAt.iso,
     timezone: getBogotaTimezoneLabel(),
     sourceRowCount: rawRows.length,
+    normalizedRowCount: normalizedRecords.length,
     recordCount: records.length,
     duplicateRowCount: normalizedResult.duplicateSourceLineNumbers.length,
+    ignoredStatusRowCount: normalizedRecords.length - records.length,
     duplicateSourceLineNumbers: normalizedResult.duplicateSourceLineNumbers,
     symbols,
     columns: inputColumns,
@@ -176,6 +187,10 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
     records,
     sourceFileChecksum,
   }
+}
+
+function isUploadableRecord(record: StockOrderRecord) {
+  return record.normalized_status === 'approved' && record.filled_quantity > 0
 }
 
 function parseCsvText(input: string) {
@@ -354,8 +369,23 @@ function repairCommonMojibake(value: string) {
   }
 }
 
+function repairRepeatedMojibake(value: string) {
+  let repaired = value
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const nextValue = repairCommonMojibake(repaired)
+    if (nextValue === repaired) {
+      return repaired
+    }
+
+    repaired = nextValue
+  }
+
+  return repaired
+}
+
 function normalizeColumnLabel(value: string) {
-  return stripAccents(repairCommonMojibake(String(value)))
+  return stripAccents(repairRepeatedMojibake(String(value)))
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')

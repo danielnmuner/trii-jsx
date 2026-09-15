@@ -1,18 +1,62 @@
 import { buildBogotaTimestamp, getBogotaTimezoneLabel } from './time'
 import { sha256Hex } from './crypto'
 
+const STOCK_ORDER_COLUMN_LABELS = {
+  createdAt: 'Fecha y hora',
+  symbol: 'Símbolo de la acción',
+  orderType: 'Tipo de orden',
+  status: 'Estado',
+  completedQuantity: 'Acciones completadas',
+  pendingQuantity: 'Acciones pendientes',
+  pricePerShare: 'Precio por acción',
+  grossAmount: 'Total invertido',
+  commissionAmount: 'Valor comisión',
+  netAmount: 'Total estimado',
+} as const
+
 const EXPECTED_STOCK_ORDER_COLUMNS = [
-  'Fecha y hora',
-  'SÃ­mbolo de la acciÃ³n',
-  'Tipo de orden',
-  'Estado',
-  'Acciones completadas',
-  'Acciones pendientes',
-  'Precio por acciÃ³n',
-  'Total invertido',
-  'Valor comisiÃ³n',
-  'Total estimado',
+  STOCK_ORDER_COLUMN_LABELS.createdAt,
+  STOCK_ORDER_COLUMN_LABELS.symbol,
+  STOCK_ORDER_COLUMN_LABELS.orderType,
+  STOCK_ORDER_COLUMN_LABELS.status,
+  STOCK_ORDER_COLUMN_LABELS.completedQuantity,
+  STOCK_ORDER_COLUMN_LABELS.pendingQuantity,
+  STOCK_ORDER_COLUMN_LABELS.pricePerShare,
+  STOCK_ORDER_COLUMN_LABELS.grossAmount,
+  STOCK_ORDER_COLUMN_LABELS.commissionAmount,
+  STOCK_ORDER_COLUMN_LABELS.netAmount,
 ] as const
+
+const EXPECTED_STOCK_ORDER_COLUMN_KEYS = [
+  'createdAt',
+  'symbol',
+  'orderType',
+  'status',
+  'completedQuantity',
+  'pendingQuantity',
+  'pricePerShare',
+  'grossAmount',
+  'commissionAmount',
+  'netAmount',
+] as const satisfies readonly (keyof typeof STOCK_ORDER_COLUMN_LABELS)[]
+
+const NORMALIZED_COLUMN_TO_KEY: Record<string, keyof typeof STOCK_ORDER_COLUMN_LABELS> = Object.entries(STOCK_ORDER_COLUMN_LABELS).reduce(
+  (accumulator, [key, label]) => {
+    accumulator[normalizeColumnLabel(label)] = key as keyof typeof STOCK_ORDER_COLUMN_LABELS
+    return accumulator
+  },
+  {} as Record<string, keyof typeof STOCK_ORDER_COLUMN_LABELS>,
+)
+
+const EXTRA_NORMALIZED_COLUMN_ALIASES: Record<string, keyof typeof STOCK_ORDER_COLUMN_LABELS> = {
+  's mbolo de la acci n': 'symbol',
+  'precio por acci n': 'pricePerShare',
+  'valor comisi n': 'commissionAmount',
+}
+
+for (const [alias, key] of Object.entries(EXTRA_NORMALIZED_COLUMN_ALIASES)) {
+  NORMALIZED_COLUMN_TO_KEY[alias] = key
+}
 
 const SPANISH_MONTHS: Record<string, number> = {
   ene: 1,
@@ -30,9 +74,9 @@ const SPANISH_MONTHS: Record<string, number> = {
 }
 
 const SPANISH_DATETIME_PATTERN =
-  /^\s*(?<day>\d{1,2})\s+(?<month>[A-Za-zÃ¡Ã©Ã­Ã³ÃºÃ±ÃÃ‰ÃÃ“ÃšÃ‘]{3,})\s+(?<year>\d{4}),\s+(?<hour>\d{1,2}):(?<minute>\d{2})\s+(?<meridiem>[ap])\.\s*m\.\s*$/i
+  /^\s*(?<day>\d{1,2})\s+(?<month>[A-Za-zÀ-ÿ]{3,})\s+(?<year>\d{4}),\s+(?<hour>\d{1,2}):(?<minute>\d{2})\s+(?<meridiem>[ap])\.\s*m\.\s*$/i
 
-type StockOrderCsvColumn = (typeof EXPECTED_STOCK_ORDER_COLUMNS)[number]
+type StockOrderCsvColumn = keyof typeof STOCK_ORDER_COLUMN_LABELS
 
 type RawCsvRow = Record<StockOrderCsvColumn, string>
 
@@ -86,12 +130,12 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
     throw new Error('The CSV file does not contain valid order rows.')
   }
 
-  const columns = csvRows[0].map((value) => value.trim())
-  validateColumns(columns)
+  const inputColumns = csvRows[0].map((value) => value.trim())
+  const normalizedColumns = validateColumns(inputColumns)
 
   const rawRows = csvRows
     .slice(1)
-    .map((values) => toRow(columns as StockOrderCsvColumn[], values))
+    .map((values) => toRow(normalizedColumns, values))
     .filter((row) => Object.values(row).some((value) => value.length > 0))
 
   if (rawRows.length === 0) {
@@ -113,7 +157,7 @@ export async function parseStockOrdersCsv(file: File): Promise<StockOrdersUpload
     duplicateRowCount: normalizedResult.duplicateSourceLineNumbers.length,
     duplicateSourceLineNumbers: normalizedResult.duplicateSourceLineNumbers,
     symbols,
-    columns,
+    columns: inputColumns,
     previewRows: records.slice(0, 10).map((record) => ({
       created_at: record.created_at,
       symbol: record.symbol,
@@ -181,16 +225,23 @@ function parseCsvText(input: string) {
 }
 
 function validateColumns(columns: string[]) {
+  const normalizedColumns = columns.map((column) => {
+    const columnKey = NORMALIZED_COLUMN_TO_KEY[normalizeColumnLabel(column)]
+    return columnKey ?? null
+  })
+
   const isExactMatch =
-    columns.length === EXPECTED_STOCK_ORDER_COLUMNS.length &&
-    columns.every((column, index) => column === EXPECTED_STOCK_ORDER_COLUMNS[index])
+    normalizedColumns.length === EXPECTED_STOCK_ORDER_COLUMNS.length &&
+    normalizedColumns.every((columnKey, index) => columnKey === EXPECTED_STOCK_ORDER_COLUMN_KEYS[index])
 
   if (isExactMatch) {
-    return
+    return normalizedColumns as StockOrderCsvColumn[]
   }
 
-  const missingColumns = EXPECTED_STOCK_ORDER_COLUMNS.filter((column) => !columns.includes(column))
-  const unexpectedColumns = columns.filter((column) => !EXPECTED_STOCK_ORDER_COLUMNS.includes(column as StockOrderCsvColumn))
+  const missingColumns = Object.entries(STOCK_ORDER_COLUMN_LABELS)
+    .filter(([key]) => !normalizedColumns.includes(key as StockOrderCsvColumn))
+    .map(([, label]) => label)
+  const unexpectedColumns = columns.filter((column) => !NORMALIZED_COLUMN_TO_KEY[normalizeColumnLabel(column)])
   const details: string[] = []
 
   if (missingColumns.length > 0) {
@@ -202,15 +253,21 @@ function validateColumns(columns: string[]) {
   }
 
   throw new Error(
-    `El CSV de Ã³rdenes no coincide con la estructura esperada de Trii; ${details.join('; ')}.`,
+    `El CSV de órdenes no coincide con la estructura esperada de Trii; ${details.join('; ')}.`,
   )
 }
 
 function toRow(columns: StockOrderCsvColumn[], values: string[]): RawCsvRow {
-  return columns.reduce((result, column, index) => {
+  const result = {} as RawCsvRow
+  for (const key of Object.keys(STOCK_ORDER_COLUMN_LABELS) as StockOrderCsvColumn[]) {
+    result[key] = ''
+  }
+
+  columns.forEach((column, index) => {
     result[column] = (values[index] ?? '').trim()
-    return result
-  }, {} as RawCsvRow)
+  })
+
+  return result
 }
 
 async function normalizeRows(rows: RawCsvRow[], sourceFileChecksum: string) {
@@ -240,12 +297,12 @@ async function normalizeRow(
   sourceFileChecksum: string,
   sourceLineNumber: number,
 ) {
-  const createdAt = parseCreatedAt(row['Fecha y hora'])
-  const symbol = row['SÃ­mbolo de la acciÃ³n'].trim().toUpperCase()
-  const normalizedStatus = normalizeStatus(row.Estado)
-  const requestedQuantity = parseRequestedQuantity(row['Acciones completadas'], row['Acciones pendientes'])
-  const filledQuantity = parseQuantity(row['Acciones completadas'])
-  const pendingQuantity = parseQuantity(row['Acciones pendientes'])
+  const createdAt = parseCreatedAt(row.createdAt)
+  const symbol = row.symbol.trim().toUpperCase()
+  const normalizedStatus = normalizeStatus(row.status)
+  const requestedQuantity = parseRequestedQuantity(row.completedQuantity, row.pendingQuantity)
+  const filledQuantity = parseQuantity(row.completedQuantity)
+  const pendingQuantity = parseQuantity(row.pendingQuantity)
   const unfilledQuantity = Math.max(requestedQuantity - filledQuantity, pendingQuantity)
 
   const record: Omit<StockOrderRecord, 'record_checksum'> = {
@@ -255,18 +312,18 @@ async function normalizeRow(
     created_month: createdAt.slice(0, 7),
     created_at_symbol: `${createdAt}#${symbol}`,
     symbol,
-    order_side: normalizeOrderSide(row['Tipo de orden']),
-    raw_status: row.Estado,
+    order_side: normalizeOrderSide(row.orderType),
+    raw_status: row.status,
     normalized_status: normalizedStatus,
     execution_status: deriveExecutionStatus(normalizedStatus, requestedQuantity, filledQuantity),
     requested_quantity: requestedQuantity,
     filled_quantity: filledQuantity,
     unfilled_quantity: unfilledQuantity,
     pending_quantity: pendingQuantity,
-    price_per_share: parseDecimalText(row['Precio por acciÃ³n']),
-    gross_amount: parseDecimalText(row['Total invertido']),
-    commission_amount: parseDecimalText(row['Valor comisiÃ³n']),
-    net_amount: parseDecimalText(row['Total estimado']),
+    price_per_share: parseDecimalText(row.pricePerShare),
+    gross_amount: parseDecimalText(row.grossAmount),
+    commission_amount: parseDecimalText(row.commissionAmount),
+    net_amount: parseDecimalText(row.netAmount),
     currency: 'COP',
   }
 
@@ -280,10 +337,35 @@ function stripAccents(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
+function repairCommonMojibake(value: string) {
+  if (!/[ÃÂ]/.test(value)) {
+    return value
+  }
+
+  try {
+    return decodeURIComponent(
+      value.replace(/./g, (character) => {
+        const code = character.charCodeAt(0)
+        return code <= 0xff ? `%${code.toString(16).padStart(2, '0')}` : character
+      }),
+    )
+  } catch {
+    return value
+  }
+}
+
+function normalizeColumnLabel(value: string) {
+  return stripAccents(repairCommonMojibake(String(value)))
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function parseCreatedAt(rawValue: string) {
   const match = SPANISH_DATETIME_PATTERN.exec(rawValue)
   if (!match?.groups) {
-    throw new Error(`Fecha y hora invÃ¡lida: ${rawValue}`)
+    throw new Error(`Fecha y hora inválida: ${rawValue}`)
   }
 
   const monthKey = stripAccents(match.groups.month).slice(0, 3).toLowerCase()
@@ -323,7 +405,7 @@ function parseDecimalText(rawValue: string) {
   }
 
   if (!/^-?\d+(\.\d+)?$/.test(value)) {
-    throw new Error(`Valor numÃ©rico invÃ¡lido: ${rawValue}`)
+    throw new Error(`Valor numérico inválido: ${rawValue}`)
   }
 
   return value

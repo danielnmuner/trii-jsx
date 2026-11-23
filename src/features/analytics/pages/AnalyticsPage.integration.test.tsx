@@ -1,73 +1,102 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { AnalyticsPage } from './AnalyticsPage'
+import { analyticsSnapshotFixtures } from '../../../mocks/fixtures'
 import { server } from '../../../mocks/server'
 import { renderWithProviders } from '../../../test/render'
 
-describe('AnalyticsPage', () => {
+// The fixtures are captured on Friday 2026-08-21 at 14:30 Bogota. Start the clock shortly after
+// (Date only, still ticking in real time so animations and polling keep working), so the overview
+// treats them as today's session regardless of the real date.
+const FIXTURE_NOW = new Date('2026-08-21T14:45:00-05:00')
+
+// Full page renders are heavy (first render includes a cold module load): allow more than 5s.
+describe('AnalyticsPage', { timeout: 20_000 }, () => {
   beforeEach(() => {
-    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-08-22T10:00:00-05:00').getTime())
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    vi.setSystemTime(FIXTURE_NOW)
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
-  it('loads the overview and renders symbol cards from mocked API data', async () => {
+  it('shows the current tabs and renders symbol cards from mocked API data', async () => {
     renderWithProviders(<AnalyticsPage />)
 
-    expect(await screen.findByRole('heading', { name: 'Analytics' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Historic' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Paperwork' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Benchmark Stats' })).not.toBeInTheDocument()
+
     expect((await screen.findAllByText('NUCO')).length).toBeGreaterThan(0)
     expect((await screen.findAllByText('ISA')).length).toBeGreaterThan(0)
   })
 
-  it('loads z-score opportunities automatically when the tab is opened', async () => {
-    renderWithProviders(<AnalyticsPage />)
+  it('never shows or requests data for an inactive issuer', async () => {
+    const requestedSymbols = new Set<string>()
+    const onRequest = ({ request }: { request: Request }) => {
+      const symbol = new URL(request.url).searchParams.get('symbol')
+      if (symbol) {
+        requestedSymbols.add(symbol.toUpperCase())
+      }
+    }
+    server.events.on('request:start', onRequest)
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Opportunities' }))
+    try {
+      renderWithProviders(<AnalyticsPage />)
 
-    await waitFor(() => {
-      expect(screen.getAllByText('48H').length).toBeGreaterThan(0)
-      expect(screen.getAllByLabelText(/z-score opportunity chart/i).length).toBe(10)
-      expect(screen.getAllByText(/\(6\)/i).length).toBeGreaterThan(0)
-    })
+      expect((await screen.findAllByText('NUCO')).length).toBeGreaterThan(0)
+      await waitFor(() => expect(requestedSymbols.has('NUCO')).toBe(true))
 
-    fireEvent.click(screen.getAllByRole('button', { name: '24H' })[0])
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/\(2\)/i).length).toBeGreaterThan(0)
-    })
-
-    fireEvent.click(screen.getAllByRole('button', { name: '6H' })[0])
-
-    await waitFor(() => {
-      expect(screen.getAllByLabelText(/z-score opportunity chart/i).length).toBe(10)
-      expect(screen.getAllByRole('button', { name: '6H' })[0]).toHaveClass('zscore-toolbar__chip--active')
-      expect(screen.getAllByText('No records in selected window').length).toBeGreaterThan(0)
-    })
+      // The issuers fixture lists INACTIVE with is_active: false.
+      expect(requestedSymbols.has('INACTIVE')).toBe(false)
+      expect(screen.queryByText('INACTIVE')).not.toBeInTheDocument()
+    } finally {
+      server.events.removeListener('request:start', onRequest)
+    }
   })
 
-  it('copies an AI prompt when a z-score point is clicked', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(window.navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    })
+  it('shows the daily range tape with today range against the historic distribution', async () => {
+    // 25 weekdays before the fixture day cycling 500 / 600 / 700 COP ranges: the median stays 600
+    // even if a Colombian holiday in the period is discarded.
+    server.use(
+      http.get('/api/analytics/daily-closing', ({ request }) => {
+        const symbol = new URL(request.url).searchParams.get('symbol') ?? 'NUCO'
+        const records = buildBusinessDays('2026-08-20', 25).map((tradingDate, index) => ({
+          symbol,
+          trading_date: tradingDate,
+          source_captured_at: `${tradingDate}T15:01:00-05:00`,
+          high_price: 40_000 + [500, 600, 700][index % 3],
+          low_price: 40_000,
+          last_price: 40_200,
+          previous_close: 40_100,
+        }))
+        return HttpResponse.json({
+          status: 'ok',
+          result: { symbol, trading_date: records[0]?.trading_date ?? null, record_count: records.length, records },
+        })
+      }),
+    )
 
     renderWithProviders(<AnalyticsPage />)
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Opportunities' }))
+    const tapes = await screen.findAllByLabelText('Daily range versus history', {}, { timeout: 5000 })
+    const nucoCard = tapes.find((tape) => tape.closest('article')?.textContent?.includes('NUCO'))
+    expect(nucoCard).toBeDefined()
 
-    const copyTargets = await screen.findAllByTestId('zscore-copy-hit')
-    fireEvent.click(copyTargets[0])
+    const tape = within(nucoCard as HTMLElement)
 
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledTimes(1)
-      expect(writeText.mock.calls[0]?.[0]).toContain('Responde exclusivamente usando estas tres secciones')
-      expect(writeText.mock.calls[0]?.[0]).toContain('1. Analisis cuantitativo')
-      expect(writeText.mock.calls[0]?.[0]).toContain('Evento completo en formato legible:')
-    })
+    // Today's range = high − low of NUCO's current fixture snapshot (widened by the last price).
+    const current = analyticsSnapshotFixtures.NUCO.result.current_snapshot
+    const high = Math.max(current.high_price ?? 0, current.last_price ?? 0)
+    const low = Math.min(current.low_price ?? Infinity, current.last_price ?? Infinity)
+    expect(tape.getByText(new Intl.NumberFormat('en-US').format(high - low))).toBeInTheDocument()
+    // The median of the historic ranges is on the scale, with the σ steps labelled above it.
+    expect(tape.getAllByText('600').length).toBeGreaterThan(0)
+    expect(tape.getByText('+1σ')).toBeInTheDocument()
   })
 
   it('keeps the last successful overview visible when a later sync fails', async () => {
@@ -88,3 +117,17 @@ describe('AnalyticsPage', () => {
     })
   })
 })
+
+/** `count` weekdays going back from `lastDate` (inclusive), newest first. */
+function buildBusinessDays(lastDate: string, count: number) {
+  const dates: string[] = []
+  const cursor = new Date(`${lastDate}T12:00:00Z`)
+  while (dates.length < count) {
+    const weekday = cursor.getUTCDay()
+    if (weekday !== 0 && weekday !== 6) {
+      dates.push(cursor.toISOString().slice(0, 10))
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
+  }
+  return dates
+}

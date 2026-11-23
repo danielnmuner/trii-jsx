@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import { resolveSessionVectorTradingDate, sanitizeAnalyticsSymbolFeed } from './analyticsDataPolicy'
 
@@ -34,6 +34,17 @@ function buildOverviewFeed(capturedAt: string): AnalyticsSymbolFeed {
 }
 
 describe('sanitizeAnalyticsSymbolFeed', () => {
+  // The policy compares snapshots with "today" in Bogota: pin the clock to the fixture's day,
+  // shortly after the post-close snapshot, so the test does not depend on the real date.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-07T16:30:00-05:00'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('keeps a same-day post-close snapshot for overview cards', () => {
     const feed = buildOverviewFeed('2026-09-07T16:26:44.126-05:00')
 

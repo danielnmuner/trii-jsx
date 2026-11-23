@@ -10,7 +10,6 @@ import {
   formatNumber,
   formatPercentFromWhole,
 } from '../lib/formatters'
-import { isColombiaBusinessDateKey } from '../lib/colombiaBusinessCalendar'
 import { SymbolIdentity } from './SymbolIdentity'
 
 type DailyClosingWindow = {
@@ -19,26 +18,27 @@ type DailyClosingWindow = {
   records: DailyClosingRecord[]
 }
 
+type DailyClosingRangeDays = (typeof dailyClosingRangeOptions)[number]
+
 type DailyClosingPanelProps = {
   windows: DailyClosingWindow[]
-  rangeDays: (typeof dailyClosingRangeOptions)[number]
-  onChangeRangeDays: (value: (typeof dailyClosingRangeOptions)[number]) => void
+  /** Range chosen per chart (by symbol); a chart without an entry uses `defaultRangeDays`. */
+  rangeBySymbol: Record<string, DailyClosingRangeDays>
+  defaultRangeDays: DailyClosingRangeDays
+  onChangeRangeDays: (symbol: string, value: DailyClosingRangeDays) => void
   orderTimelineBySymbol?: Record<string, Record<string, DailyOrderPositionSummary | undefined>>
 }
 
 const dailyClosingRangeOptions = [365, 180, 90, 30, 15, 7] as const
 
-export function DailyClosingPanel({ windows, rangeDays, onChangeRangeDays, orderTimelineBySymbol = {} }: DailyClosingPanelProps) {
-  const visibleWindows = useMemo(
-    () =>
-      windows
-        .map((window) => ({
-          ...window,
-          records: filterHistoricRecordsByRange(window.records, rangeDays),
-        }))
-        .filter((window) => window.records.length > 0),
-    [rangeDays, windows],
-  )
+export function DailyClosingPanel({
+  windows,
+  rangeBySymbol,
+  defaultRangeDays,
+  onChangeRangeDays,
+  orderTimelineBySymbol = {},
+}: DailyClosingPanelProps) {
+  const visibleWindows = useMemo(() => windows.filter((window) => window.records.length > 0), [windows])
 
   return (
     <section className="daily-close-grid" aria-label="Daily closing charts">
@@ -46,8 +46,8 @@ export function DailyClosingPanel({ windows, rangeDays, onChangeRangeDays, order
         <DailyClosingCard
           key={window.symbol}
           window={window}
-          rangeDays={rangeDays}
-          onChangeRangeDays={onChangeRangeDays}
+          rangeDays={rangeBySymbol[window.symbol] ?? defaultRangeDays}
+          onChangeRangeDays={(value) => onChangeRangeDays(window.symbol, value)}
           orderTimeline={orderTimelineBySymbol[window.symbol] ?? {}}
         />
       ))}
@@ -62,8 +62,8 @@ function DailyClosingCard({
   orderTimeline,
 }: {
   window: DailyClosingWindow
-  rangeDays: (typeof dailyClosingRangeOptions)[number]
-  onChangeRangeDays: (value: (typeof dailyClosingRangeOptions)[number]) => void
+  rangeDays: DailyClosingRangeDays
+  onChangeRangeDays: (value: DailyClosingRangeDays) => void
   orderTimeline: Record<string, DailyOrderPositionSummary | undefined>
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null)
@@ -611,35 +611,18 @@ function buildDailyClosingTicks(
   })
 }
 
+/**
+ * Consecutive x slots for the days that actually have data. Days without data (holidays, or
+ * periods where nothing was collected) take no space, so neighbouring bars stay together.
+ */
 function buildBusinessDayIndex(records: DailyClosingRecord[]) {
-  const tradingDates = records
-    .map((record) => record.trading_date)
-    .filter((value): value is string => Boolean(value && value.trim().length > 0))
-  const firstTradingDate = tradingDates[0]
-  const lastTradingDate = tradingDates[tradingDates.length - 1]
-
-  if (!firstTradingDate || !lastTradingDate) {
-    return new Map<string, number>()
-  }
-
-  const start = parseDateKey(firstTradingDate)
-  const end = parseDateKey(lastTradingDate)
-  if (!start || !end) {
-    return new Map<string, number>()
-  }
-
   const indexByTradingDate = new Map<string, number>()
-  let businessIndex = 0
-  const cursor = new Date(start.getTime())
 
-  while (cursor.getTime() <= end.getTime()) {
-    const dateKey = toDateKey(cursor)
-    if (isColombiaBusinessDateKey(dateKey)) {
-      indexByTradingDate.set(dateKey, businessIndex)
-      businessIndex += 1
+  for (const record of records) {
+    const tradingDate = record.trading_date?.trim()
+    if (tradingDate && !indexByTradingDate.has(tradingDate)) {
+      indexByTradingDate.set(tradingDate, indexByTradingDate.size)
     }
-
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
 
   return indexByTradingDate
@@ -652,22 +635,6 @@ function resolveBusinessDayOffset(
 ) {
   const businessDayOffset = businessDayIndexByTradingDate.get(record.trading_date)
   return typeof businessDayOffset === 'number' ? businessDayOffset : fallbackIndex
-}
-
-function parseDateKey(dateKey: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
-  if (!match) {
-    return null
-  }
-
-  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
-}
-
-function toDateKey(date: Date) {
-  const year = date.getUTCFullYear()
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getUTCDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function buildLinearPath(points: Array<{ x: number; y: number }>) {

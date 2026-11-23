@@ -84,29 +84,23 @@ export function buildHistoricTransversalExportText(input: BuildHistoricPromptInp
   ].join('\n')
 }
 
+/**
+ * Keeps the most recent `rangeDays` trading days that actually have data (7D = the last 7 days
+ * with records), not a calendar window: days without data never eat into the range.
+ */
 export function filterHistoricRecordsByRange(records: DailyClosingRecord[], rangeDays: number) {
   if (records.length === 0) {
     return records
   }
 
-  const epochs = records
-    .map((record) => new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime())
-    .filter((value) => !Number.isNaN(value))
+  const businessRecords = records.filter((record) => isColombiaBusinessDateKey(record.trading_date))
+  const keptDates = new Set(
+    [...new Set(businessRecords.map((record) => record.trading_date))]
+      .sort((left, right) => (left < right ? 1 : left > right ? -1 : 0))
+      .slice(0, Math.max(0, rangeDays)),
+  )
 
-  if (epochs.length === 0) {
-    return records
-  }
-
-  const latestEpoch = Math.max(...epochs)
-  const rangeStart = latestEpoch - rangeDays * 24 * 60 * 60 * 1000
-
-  return records.filter((record) => {
-    if (!isColombiaBusinessDateKey(record.trading_date)) {
-      return false
-    }
-    const epoch = new Date(record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`).getTime()
-    return !Number.isNaN(epoch) && epoch >= rangeStart
-  })
+  return businessRecords.filter((record) => keptDates.has(record.trading_date))
 }
 
 export function downloadHistoricPromptFile(browserWindow: Window, content: string, rangeDays: number) {

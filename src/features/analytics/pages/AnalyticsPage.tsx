@@ -36,6 +36,8 @@ const topTabs = ['Overview', 'Historic', 'User Guide', 'Paperwork'] as const
 const visibleTopTabs = topTabs.filter((tab) => tab !== 'User Guide')
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
 const historicRangeOptions = [365, 180, 90, 30, 15, 7] as const
+type HistoricRangeDays = (typeof historicRangeOptions)[number]
+const DEFAULT_HISTORIC_RANGE_DAYS: HistoricRangeDays = 365
 
 function getErrorMessage(error: unknown, fallback = 'Unknown error') {
   return error instanceof Error ? error.message : fallback
@@ -65,7 +67,8 @@ export function AnalyticsPage() {
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
   const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>(() => resolveInitialTopTab())
-  const [historicRangeDays, setHistoricRangeDays] = useState<(typeof historicRangeOptions)[number]>(365)
+  // Each Historic chart keeps its own range (7D, 30D, …); changing one never affects the others.
+  const [historicRangeBySymbol, setHistoricRangeBySymbol] = useState<Record<string, HistoricRangeDays>>({})
   const [selectedPaperworkYear, setSelectedPaperworkYear] = useState<string | null>(null)
   const activeIssuerSymbols = symbols.length > 0 ? symbols : []
   const orderedIssuerSymbols =
@@ -291,11 +294,18 @@ export function AnalyticsPage() {
       orderedDailyClosingResults
         .map((window) => ({
           ...window,
-          records: filterHistoricRecordsByRange(window.records, historicRangeDays),
+          records: filterHistoricRecordsByRange(window.records, historicRangeBySymbol[window.symbol] ?? DEFAULT_HISTORIC_RANGE_DAYS),
         }))
         .filter((window) => window.records.length > 0),
-    [historicRangeDays, orderedDailyClosingResults],
+    [historicRangeBySymbol, orderedDailyClosingResults],
   )
+  // The export names a single range: the widest one in use across the visible charts.
+  const historicExportRangeDays = visibleHistoricWindows.reduce(
+    (widest, window) => Math.max(widest, historicRangeBySymbol[window.symbol] ?? DEFAULT_HISTORIC_RANGE_DAYS),
+    0,
+  ) || DEFAULT_HISTORIC_RANGE_DAYS
+  const handleHistoricRangeChange = (symbol: string, rangeDays: HistoricRangeDays) =>
+    setHistoricRangeBySymbol((current) => ({ ...current, [symbol]: rangeDays }))
 
   const issuersDegraded = issuersQuery.isError && hasIssuerData
   const snapshotDegraded =
@@ -388,12 +398,12 @@ export function AnalyticsPage() {
   const handleHistoricExport = () => {
     try {
       const exportText = buildHistoricTransversalExportText({
-        rangeDays: historicRangeDays,
+        rangeDays: historicExportRangeDays,
         exportedAt: new Date().toISOString(),
         windows: visibleHistoricWindows,
         orderTimelineBySymbol: dailyOrderTimelineQuery.bySymbol,
       })
-      downloadHistoricPromptFile(window, exportText, historicRangeDays)
+      downloadHistoricPromptFile(window, exportText, historicExportRangeDays)
     } catch {
       // Keep the interaction quiet; browser download UX is enough here.
     }
@@ -480,8 +490,9 @@ export function AnalyticsPage() {
           ) : (
             <DailyClosingPanel
               windows={orderedDailyClosingResults}
-              rangeDays={historicRangeDays}
-              onChangeRangeDays={setHistoricRangeDays}
+              rangeBySymbol={historicRangeBySymbol}
+              defaultRangeDays={DEFAULT_HISTORIC_RANGE_DAYS}
+              onChangeRangeDays={handleHistoricRangeChange}
               orderTimelineBySymbol={dailyOrderTimelineQuery.bySymbol}
             />
           )

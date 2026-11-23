@@ -1,7 +1,6 @@
 import { getJson } from '../../../shared/api/http'
 import { ANALYTICS_DAILY_CLOSING_LIMIT, ANALYTICS_SNAPSHOT_LIMIT, ANALYTICS_ZSCORE_LIMIT } from '../config'
 import {
-  analyticsCatalogResponseSchema,
   analyticsHistoricStatsResponseSchema,
   analyticsSnapshotResponseSchema,
   dailyClosingResponseSchema,
@@ -19,11 +18,6 @@ type FetchZscoreOpportunitiesParams = {
   toTradingDate?: string
   sinceCapturedAt?: string
   limit?: number
-}
-
-export async function fetchAnalyticsCatalog() {
-  const payload = await getJson('/analytics/catalog')
-  return analyticsCatalogResponseSchema.parse(payload)
 }
 
 export async function fetchAnalyticsSnapshot(symbol: string, limit = ANALYTICS_SNAPSHOT_LIMIT) {

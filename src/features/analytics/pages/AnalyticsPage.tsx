@@ -9,11 +9,9 @@ import { Tabs } from '../../../shared/ui/Tabs'
 import { AnalyticsFilters, AnalyticsHero } from '../components/AnalyticsHero'
 import { DailyClosingPanel } from '../components/DailyClosingPanel'
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
-import { HistoricStatsPanel } from '../components/HistoricStatsPanel'
 import { OverviewPanel } from '../components/OverviewPanel'
 import {
   primeDailyClosingCache,
-  useAnalyticsCatalog,
   useAnalyticsSnapshots,
   useDailyClosingSnapshots,
 } from '../hooks/useAnalytics'
@@ -22,6 +20,7 @@ import { usePaperworkAuth } from '../../paperwork/auth/usePaperworkAuth'
 import { PaperworkAccessGate } from '../../paperwork/components/PaperworkAccessGate'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { usePaperworkAnalytics } from '../../paperwork/hooks/usePaperworkAnalytics'
+import { useActiveIssuers } from '../../issuers/hooks/useActiveIssuers'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import {
@@ -32,8 +31,9 @@ import {
 import { rankCoreSymbols, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
-const topTabs = ['Overview', 'Historic', 'Benchmark Stats', 'User Guide', 'Paperwork'] as const
-const visibleTopTabs = topTabs.filter((tab) => tab !== 'Benchmark Stats' && tab !== 'User Guide')
+// Benchmark Stats is disabled: not listed, not reachable, not rendered.
+const topTabs = ['Overview', 'Historic', 'User Guide', 'Paperwork'] as const
+const visibleTopTabs = topTabs.filter((tab) => tab !== 'User Guide')
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
 const historicRangeOptions = [365, 180, 90, 30, 15, 7] as const
 
@@ -54,28 +54,31 @@ function hasSevereCoverageLoss(loadedCount: number, requestedCount: number, mini
   return loadedCount / requestedCount < minimumCoverage
 }
 
+const EMPTY_SYMBOLS: string[] = []
+
 export function AnalyticsPage() {
   const queryClient = useQueryClient()
-  const catalogQuery = useAnalyticsCatalog()
-  const symbols = catalogQuery.data?.result.symbols ?? []
+  // Active issuers are the single source of truth for which symbols every tab shows and requests.
+  const issuersQuery = useActiveIssuers()
+  const symbols = issuersQuery.data?.symbols ?? EMPTY_SYMBOLS
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([])
   const [symbolOrder, setSymbolOrder] = useState<string[]>(() => readAnalyticsSymbolOrder())
   const [coreSortIntent, setCoreSortIntent] = useState<CoreSortIntent>('manual')
   const [activeTab, setActiveTab] = useState<(typeof topTabs)[number]>(() => resolveInitialTopTab())
   const [historicRangeDays, setHistoricRangeDays] = useState<(typeof historicRangeOptions)[number]>(365)
   const [selectedPaperworkYear, setSelectedPaperworkYear] = useState<string | null>(null)
-  const catalogReadySymbols = symbols.length > 0 ? symbols : []
-  const orderedCatalogSymbols =
+  const activeIssuerSymbols = symbols.length > 0 ? symbols : []
+  const orderedIssuerSymbols =
     symbolOrder.length > 0
       ? [
-          ...symbolOrder.filter((symbol) => catalogReadySymbols.includes(symbol)),
-          ...catalogReadySymbols.filter((symbol) => !symbolOrder.includes(symbol)),
+          ...symbolOrder.filter((symbol) => activeIssuerSymbols.includes(symbol)),
+          ...activeIssuerSymbols.filter((symbol) => !symbolOrder.includes(symbol)),
         ]
-      : catalogReadySymbols
+      : activeIssuerSymbols
   const querySelectedSymbols =
     selectedSymbols.length > 0
-      ? orderedCatalogSymbols.filter((symbol) => selectedSymbols.includes(symbol))
-      : orderedCatalogSymbols
+      ? orderedIssuerSymbols.filter((symbol) => selectedSymbols.includes(symbol))
+      : orderedIssuerSymbols
 
   const snapshotsQuery = useAnalyticsSnapshots(querySelectedSymbols)
   const dailyClosingQuery = useDailyClosingSnapshots(querySelectedSymbols, activeTab === 'Historic')
@@ -150,17 +153,6 @@ export function AnalyticsPage() {
     writeAnalyticsSymbolOrder(symbolOrder)
   }, [symbolOrder])
 
-  const orderedSnapshotResults = useMemo(
-    () =>
-      effectiveSelectedSymbols.reduce<AnalyticsSymbolFeed[]>((ordered, symbol) => {
-        const match = snapshotsQuery.results.find((result) => result.symbol === symbol)
-        if (match) {
-          ordered.push(match)
-        }
-        return ordered
-      }, []),
-    [effectiveSelectedSymbols, snapshotsQuery.results],
-  )
   const orderedEligibleOverviewResults = useMemo(
     () =>
       effectiveSelectedSymbols.reduce<AnalyticsSymbolFeed[]>((ordered, symbol) => {
@@ -291,7 +283,7 @@ export function AnalyticsPage() {
     setCoreSortIntent(nextIntent)
   }
 
-  const hasCatalogData = symbols.length > 0
+  const hasIssuerData = symbols.length > 0
   const hasSnapshotData = snapshotsQuery.results.length > 0
   const hasDailyClosingData = dailyClosingQuery.results.some((window) => window.records.length > 0)
   const visibleHistoricWindows = useMemo(
@@ -305,7 +297,7 @@ export function AnalyticsPage() {
     [historicRangeDays, orderedDailyClosingResults],
   )
 
-  const catalogDegraded = catalogQuery.isError && hasCatalogData
+  const issuersDegraded = issuersQuery.isError && hasIssuerData
   const snapshotDegraded =
     snapshotsQuery.isError &&
     hasSnapshotData &&
@@ -322,14 +314,14 @@ export function AnalyticsPage() {
       }
     }
 
-    if (catalogQuery.isLoading && !hasCatalogData) {
+    if (issuersQuery.isLoading && !hasIssuerData) {
       return {
         label: 'Loading',
         tone: 'loading' as const,
       }
     }
 
-    if (activeTab === 'Overview' || activeTab === 'Benchmark Stats') {
+    if (activeTab === 'Overview') {
       if (snapshotsQuery.isLoading && !hasSnapshotData) {
         return {
           label: 'Loading',
@@ -361,14 +353,14 @@ export function AnalyticsPage() {
       }
     }
 
-    if (catalogQuery.isFetching) {
+    if (issuersQuery.isFetching) {
       return {
         label: 'Syncing',
         tone: 'fetching' as const,
       }
     }
 
-    if (catalogDegraded && !hasSnapshotData && !hasDailyClosingData) {
+    if (issuersDegraded && !hasSnapshotData && !hasDailyClosingData) {
       return {
         label: 'Degraded',
         tone: 'degraded' as const,
@@ -381,12 +373,12 @@ export function AnalyticsPage() {
     }
   }, [
     activeTab,
-    catalogDegraded,
-    catalogQuery.isFetching,
-    catalogQuery.isLoading,
+    issuersDegraded,
+    issuersQuery.isFetching,
+    issuersQuery.isLoading,
     dailyClosingDegraded,
     dailyClosingQuery.isLoading,
-    hasCatalogData,
+    hasIssuerData,
     hasDailyClosingData,
     hasSnapshotData,
     snapshotDegraded,
@@ -427,11 +419,11 @@ export function AnalyticsPage() {
         onSortIntentChange={handleCoreSortIntentChange}
       />
 
-      {catalogQuery.isError && !hasCatalogData ? (
+      {issuersQuery.isError && !hasIssuerData ? (
         <StatusState
           tone="error"
-          title="Catalog Request Failed"
-          description={getErrorMessage(catalogQuery.error)}
+          title="Issuers Request Failed"
+          description={getErrorMessage(issuersQuery.error)}
         />
       ) : null}
 
@@ -474,20 +466,6 @@ export function AnalyticsPage() {
           <DiagnosticsPanel />
         ) : null}
 
-        {activeTab === 'Benchmark Stats' ? (
-          !hasSnapshotData && snapshotsQuery.isError ? (
-            <StatusState
-              tone="error"
-              title="Historic Stats Request Failed"
-              description={getErrorMessage(snapshotsQuery.error)}
-            />
-          ) : !hasSnapshotData && snapshotsQuery.isLoading ? (
-            null
-          ) : (
-            <HistoricStatsPanel snapshots={orderedSnapshotResults} />
-          )
-        ) : null}
-
         {activeTab === 'Historic' ? (
           !hasDailyClosingData && dailyClosingQuery.isLoading ? (
             null
@@ -507,6 +485,12 @@ export function AnalyticsPage() {
               orderTimelineBySymbol={dailyOrderTimelineQuery.bySymbol}
             />
           )
+        ) : null}
+
+        {activeTab === 'Historic' ? (
+          <p className="historic-gap-note">
+            Nov 9–20 omitted: a capture extension issue left those days without prices. Resolved Nov 23.
+          </p>
         ) : null}
 
         {activeTab === 'Paperwork' ? (

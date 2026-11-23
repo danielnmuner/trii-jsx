@@ -780,6 +780,16 @@ button {
   overflow: hidden;
 }
 
+.historic-gap-note {
+  flex: none;
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  text-align: right;
+}
+
 .analytics-stage--scroll {
   overflow-x: hidden;
   overflow-y: auto;
@@ -822,6 +832,7 @@ button {
 
 .overview-card__title {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -1073,9 +1084,23 @@ button {
   white-space: nowrap;
 }
 
+/* Symbol name with the snapshot time stacked underneath in small type. */
+.overview-card__identity {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Align the time with the first letter of the name: square logo (1em) + 0.28em gap, at the h3 size (0.98rem). */
+.overview-card__identity:has(.symbol-identity__icon) .overview-card__meta {
+  padding-left: calc(0.98rem * 1.28);
+}
+
 .overview-card__meta {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
+  font-size: 0.42rem;
   line-height: 1;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -1721,6 +1746,326 @@ button {
 
 .overview-session__focusDot--vwap {
   stroke: rgba(170, 255, 39, 1);
+}
+
+/* Daily range vs history (header). Informational: one neon hue, intensity grows by σ section. */
+.overview-card__headlineVariation {
+  --variation-rgb: 176, 82, 255;
+  --last-rgb: 52, 229, 255;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.overview-card__headlineVariationIcon {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: rgba(var(--variation-rgb), 1);
+  box-shadow:
+    0 0 0 1px rgba(var(--variation-rgb), 0.28),
+    0 0 12px rgba(var(--variation-rgb), 0.28);
+}
+
+.overview-card__headlineVariationLabel {
+  color: rgba(var(--variation-rgb), 0.98);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.5rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.overview-card__headlineVariationValue {
+  color: rgba(var(--variation-rgb), 1);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 14px rgba(var(--variation-rgb), 0.24);
+}
+
+.overview-card__headlineVariationNote {
+  color: var(--text-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.overview-card__headlineVariationLast {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(var(--last-rgb), 0.98);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.overview-card__headlineVariationLastDot {
+  width: 0;
+  height: 9px;
+  border-left: 1px dashed rgba(var(--last-rgb), 1);
+}
+
+.overview-card__headlineVariation--notice .overview-card__headlineVariationNote {
+  color: var(--text-faint);
+}
+
+.range-tape {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  --row-h: 7px;
+  --row-gap: 1.5px;
+  gap: var(--row-gap);
+  flex: 1 1 auto;
+  min-width: 168px;
+  /* Room for the last-price marker when it sits at either end (day low / day high). */
+  padding-inline: 5px;
+}
+
+.range-tape__track {
+  position: relative;
+  height: 4px;
+}
+
+.range-tape__section {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-right: 2px solid var(--bg-panel);
+}
+
+.range-tape__section:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.range-tape__section--history-above3,
+.range-tape__section--today-above3 {
+  border-right: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Sequential ramps, validated on the panel surface: lighter = further above the median range.
+   History is purple; today's range recolors the same σ sections in the app's lime. */
+.range-tape__section--history-below2 { background: #4b2a78; }
+.range-tape__section--history-below1 { background: #7036b8; }
+.range-tape__section--history-above1 { background: #9b4dff; }
+.range-tape__section--history-above2 { background: #c28cff; }
+.range-tape__section--history-above3 { background: #e6ccff; }
+.range-tape__section--today-below2 { background: #2f450c; }
+.range-tape__section--today-below1 { background: #557a14; }
+.range-tape__section--today-above1 { background: #86c21e; }
+.range-tape__section--today-above2 { background: #b8f545; }
+.range-tape__section--today-above3 { background: #e4ffb3; }
+
+/* Same sections, clipped to 0 → today's range (clip-path set inline). */
+.range-tape__todayLayer {
+  position: absolute;
+  inset: 0;
+}
+
+
+/* Last price: a dashed cyan line from its value label (top row) down through the tape. */
+.range-tape__lastLine {
+  position: absolute;
+  top: calc(-1 * (var(--row-h) + 2 * var(--row-gap)));
+  width: 0;
+  height: calc(var(--row-h) + 2 * var(--row-gap) + 4px + 1px);
+  border-left: 1px dashed rgba(var(--last-rgb), 1);
+  filter: drop-shadow(0 0 3px rgba(var(--last-rgb), 0.55));
+  transform: translateX(-0.5px);
+}
+
+.range-tape__markerRow {
+  position: relative;
+  height: var(--row-h);
+}
+
+.range-tape__markerValue {
+  position: absolute;
+  top: 0;
+  color: rgba(var(--last-rgb), 1);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.46rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.range-tape__markerValue--center { transform: translateX(-50%); }
+.range-tape__markerValue--start { transform: translateX(-2px); }
+.range-tape__markerValue--end { transform: translateX(calc(-100% + 2px)); }
+
+.range-tape__overflow {
+  position: absolute;
+  top: 50%;
+  right: -7px;
+  transform: translateY(-50%);
+  color: var(--text);
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+.range-tape__sigmas,
+.range-tape__ticks {
+  position: relative;
+  height: var(--row-h);
+}
+
+.range-tape__sigma {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: rgba(var(--variation-rgb), 0.85);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.42rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.range-tape__sigma:last-child {
+  transform: translateX(-100%);
+}
+
+.range-tape__tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--text-faint);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.42rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.range-tape__tick:last-child {
+  transform: translateX(-100%);
+}
+
+/* Small notch on the tape at each σ step, so the boundaries read even under today's bar. */
+.range-tape__tick::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * (var(--row-gap) + 4px + 3px));
+  left: 50%;
+  width: 1px;
+  height: 7px;
+  background: rgba(244, 246, 248, 0.38);
+}
+
+.range-tape__tick:last-child::before {
+  left: 100%;
+}
+
+.range-tape__tick--median {
+  color: var(--text-soft);
+}
+
+.range-tape__tick--median::before {
+  background: rgba(244, 246, 248, 0.75);
+}
+
+/* Keep the card header on one line. The tape stretches to fill the line; as width shrinks,
+   secondary text is shed first (it stays in the tooltip). */
+@media (max-width: 1580px) {
+  .overview-card__headlineVariation:not(.overview-card__headlineVariation--notice) .overview-card__headlineVariationNote {
+    display: none;
+  }
+
+  .range-tape {
+    min-width: 128px;
+  }
+}
+
+@media (max-width: 1480px) {
+  .overview-card__headlineVariationLast,
+  .range-tape__markerRow,
+  .range-tape__sigmas,
+  .range-tape__ticks {
+    display: none;
+  }
+
+  .range-tape {
+    min-width: 96px;
+  }
+
+  .range-tape__lastLine {
+    top: -4px;
+    height: 12px;
+  }
+}
+
+@media (max-width: 1340px) {
+  .range-tape {
+    min-width: 64px;
+  }
+}
+
+/* Phones: data on the first line, the tape on its own full-width line underneath. */
+@media (max-width: 540px) {
+  .overview-card__headlineVariationLast {
+    margin-left: auto;
+  }
+
+  .range-tape {
+    order: 1;
+    flex: 1 0 100%;
+  }
+
+  .range-tape__tick,
+  .range-tape__sigma {
+    font-size: 0.5rem;
+  }
+
+  .range-tape {
+    --row-h: 9px;
+  }
+
+  .range-tape__markerValue {
+    font-size: 0.54rem;
+  }
+}
+
+/* Here the block always wraps onto its own header line, so it has room for the full version. */
+@media (max-width: 1320px) {
+  .overview-card__headlineVariation {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .overview-card__headlineVariation:not(.overview-card__headlineVariation--notice) .overview-card__headlineVariationNote,
+  .overview-card__headlineVariationLast {
+    display: inline-flex;
+  }
+
+  .range-tape__markerRow,
+  .range-tape__sigmas,
+  .range-tape__ticks {
+    display: block;
+  }
+
+  .range-tape {
+    min-width: 168px;
+  }
+
+  .range-tape__lastLine {
+    top: calc(-1 * (var(--row-h) + 2 * var(--row-gap)));
+    height: calc(var(--row-h) + 2 * var(--row-gap) + 4px + 1px);
+  }
 }
 
 .overview-session__footer {

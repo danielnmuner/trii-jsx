@@ -1,14 +1,14 @@
 import { http, HttpResponse } from 'msw'
 import {
-  analyticsCatalogFixture,
   analyticsHistoricStatsFixtures,
   analyticsSnapshotFixtures,
   dailyClosingFixtures,
+  issuersFixture,
   zscoreOpportunitiesFixtures,
 } from './fixtures'
 
 export const handlers = [
-  http.get('/api/analytics/catalog', () => HttpResponse.json(analyticsCatalogFixture)),
+  http.get('/api/issuers', () => HttpResponse.json(issuersFixture)),
   http.get('/api/analytics/snapshot', ({ request }) => {
     const url = new URL(request.url)
     const symbol = url.searchParams.get('symbol')?.toUpperCase()

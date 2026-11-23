@@ -117,36 +117,6 @@ export const seasonalityProfileSchema = z
   })
   .passthrough()
 
-export const analyticsCatalogRecordSchema = z.object({
-  symbol: z.string(),
-  current_snapshot_key: z
-    .object({
-      symbol: z.string(),
-      captured_at: z.string(),
-    })
-    .nullable()
-    .optional(),
-  previous_snapshot_key: z
-    .object({
-      symbol: z.string(),
-      captured_at: z.string(),
-    })
-    .nullable()
-    .optional(),
-})
-
-export const analyticsCatalogResponseSchema = z.object({
-  status: z.literal('ok'),
-  result: z.object({
-    symbols: z.array(z.string()),
-    symbol_count: z.number(),
-    trading_date: z.string().nullable(),
-    to_timestamp: z.string().nullable(),
-    record_count: z.number(),
-    records: z.array(analyticsCatalogRecordSchema).optional().default([]),
-  }),
-})
-
 export const analyticsSnapshotResponseSchema = z.object({
   status: z.literal('ok'),
   result: z.object({
@@ -342,7 +312,6 @@ export const sessionVectorSegmentsResponseSchema = z.object({
   }),
 })
 
-export type AnalyticsCatalogResponse = z.infer<typeof analyticsCatalogResponseSchema>
 export type AnalyticsSnapshotResponse = z.infer<typeof analyticsSnapshotResponseSchema>
 export type AnalyticsSnapshotResult = AnalyticsSnapshotResponse['result']
 export type AnalyticsHistoricStatsResponse = z.infer<typeof analyticsHistoricStatsResponseSchema>

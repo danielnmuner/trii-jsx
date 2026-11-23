@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import {
-  fetchAnalyticsCatalog,
   fetchAnalyticsHistoricStats,
   fetchAnalyticsSnapshot,
   fetchDailyClosingSnapshots,
@@ -49,17 +48,6 @@ export type DailyClosingWindow = {
   symbol: string
   recordCount: number
   records: DailyClosingRecord[]
-}
-
-export function useAnalyticsCatalog() {
-  return useQuery({
-    queryKey: ['analytics', 'catalog'],
-    queryFn: () => fetchAnalyticsCatalog(),
-    refetchInterval: ANALYTICS_REALTIME_REFETCH_MS,
-    refetchIntervalInBackground: true,
-    staleTime: ANALYTICS_REALTIME_STALE_MS,
-    gcTime: ANALYTICS_REALTIME_GC_MS,
-  })
 }
 
 export function useAnalyticsSnapshots(symbols: string[]) {

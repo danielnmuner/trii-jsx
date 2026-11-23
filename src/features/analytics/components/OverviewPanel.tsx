@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import type { AnalyticsSymbolFeed, HistoricStat } from '../api/schemas'
+import { DailyRangeTape } from './DailyRangeTape'
 import { DeterministicSimulationTile } from './DeterministicSimulationTile'
 import { OverviewSessionVectorTile, type SessionVectorHoverSnapshot } from './OverviewSessionVectorTile'
 import { SeasonalityMiniChart } from './SeasonalityMiniChart'
@@ -148,18 +149,21 @@ function OverviewSnapshotCard({
     <article className="overview-card">
       <header className="overview-card__header">
         <div className="overview-card__title">
-          <h3>
-            <a
-              href={openAiUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="overview-card__titleLink"
-              aria-label={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
-              title={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
-            >
-              <SymbolIdentity symbol={snapshot.symbol} />
-            </a>
-          </h3>
+          <div className="overview-card__identity">
+            <h3>
+              <a
+                href={openAiUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="overview-card__titleLink"
+                aria-label={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
+                title={`Open ChatGPT qualitative analysis for ${snapshot.symbol}`}
+              >
+                <SymbolIdentity symbol={snapshot.symbol} />
+              </a>
+            </h3>
+            <span className={`overview-card__meta overview-card__meta--${freshnessTone}`}>{headerMeta}</span>
+          </div>
           <div className="overview-card__headlineQuote">
             <strong className={`overview-card__headlinePrice overview-card__headlinePrice--${marketTone}`}>
               {formatMetricValue('last_price', current.last_price)}
@@ -222,8 +226,8 @@ function OverviewSnapshotCard({
               </div>
             </div>
           </div>
+          <DailyRangeTape symbol={snapshot.symbol} snapshot={current} />
         </div>
-        <span className={`overview-card__meta overview-card__meta--${freshnessTone}`}>{headerMeta}</span>
       </header>
 
       <div className="overview-tape overview-tape--microstructure" role="group" aria-label={`${snapshot.symbol} microstructure tape`}>

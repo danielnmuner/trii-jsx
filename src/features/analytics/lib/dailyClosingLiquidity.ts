@@ -22,8 +22,14 @@ export function getCachedDailyClosingLiquiditySummary(queryClient: QueryClient, 
 }
 
 export function useCachedDailyClosingLiquiditySummary(symbol: string) {
+  const cachedWindow = useCachedDailyClosingWindow(symbol)
+  return summarizeDailyClosingLiquidity(cachedWindow?.records ?? [])
+}
+
+/** Reads the daily-closing window Overview already prefetched; never triggers a request. */
+export function useCachedDailyClosingWindow(symbol: string) {
   const queryClient = useQueryClient()
-  const cachedWindow = useSyncExternalStore(
+  return useSyncExternalStore(
     (onStoreChange) =>
       queryClient.getQueryCache().subscribe((event) => {
         const queryKey = event?.query.queryKey
@@ -39,8 +45,6 @@ export function useCachedDailyClosingLiquiditySummary(symbol: string) {
     () => queryClient.getQueryData<CachedDailyClosingWindow>(['analytics', 'daily-closing', symbol]) ?? null,
     () => queryClient.getQueryData<CachedDailyClosingWindow>(['analytics', 'daily-closing', symbol]) ?? null,
   )
-
-  return summarizeDailyClosingLiquidity(cachedWindow?.records ?? [])
 }
 
 export function summarizeDailyClosingLiquidity(records: DailyClosingRecord[]): DailyClosingLiquiditySummary {

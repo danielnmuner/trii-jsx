@@ -262,31 +262,26 @@ export const analyticsHistoricStatsFixtures = Object.fromEntries(
   }
 >
 
-export const analyticsCatalogFixture = {
+export const issuersFixture = {
   status: 'ok',
   result: {
-    symbols: [...mockSymbols],
-    symbol_count: mockSymbols.length,
-    trading_date: '2026-08-21',
-    to_timestamp: '2026-08-21T14:30:00-05:00',
-    record_count: mockSymbols.length,
-    records: mockSymbols.map((symbol, index) => {
-      const snapshotFixture = analyticsSnapshotFixtures[symbol]
-      return {
+    count: mockSymbols.length + 1,
+    items: [
+      ...mockSymbols.map((symbol) => ({
         symbol,
-        current_snapshot_key: {
-          symbol,
-          captured_at: snapshotFixture.result.current_snapshot.captured_at,
-        },
-        previous_snapshot_key:
-          index % 5 === 0
-            ? null
-            : {
-                symbol,
-                captured_at: snapshotFixture.result.previous_snapshot?.captured_at ?? snapshotFixture.result.current_snapshot.captured_at,
-              },
-      }
-    }),
+        is_active: true,
+        url: `https://web.trii.co/stock/${symbol}`,
+        added_at: '2026-08-21T00:00:00+00:00',
+        updated_at: '2026-08-21T00:00:00+00:00',
+      })),
+      {
+        symbol: 'INACTIVE',
+        is_active: false,
+        url: 'https://web.trii.co/stock/INACTIVE',
+        added_at: '2026-08-21T00:00:00+00:00',
+        updated_at: '2026-08-21T00:00:00+00:00',
+      },
+    ],
   },
 } as const
 

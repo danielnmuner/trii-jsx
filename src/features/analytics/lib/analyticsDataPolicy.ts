@@ -41,10 +41,26 @@ export function filterZscoreOpportunityRecords(records: ZscoreOpportunityRecord[
   return records.filter((record) => isCleanAnalyticsCapture(record.captured_at))
 }
 
+/**
+ * Trading dates (inclusive, Bogota) where the capture extension stored snapshots without prices.
+ * Historic ignores them so the gap does not show up as noise. Paperwork does not use this policy.
+ */
+export const HISTORIC_MONITORING_GAPS = [
+  { from: '2026-11-09', to: '2026-11-20', resolvedOn: '2026-11-23' },
+] as const
+
+export function isHistoricMonitoringGapDate(tradingDate: string) {
+  return HISTORIC_MONITORING_GAPS.some((gap) => tradingDate >= gap.from && tradingDate <= gap.to)
+}
+
 export function filterDailyClosingRecords(records: DailyClosingRecord[]) {
   return records.filter((record) => {
     const capturedAt = record.source_captured_at ?? `${record.trading_date}T15:00:00-05:00`
-    return isColombiaBusinessDateKey(record.trading_date) && isCleanAnalyticsCapture(capturedAt)
+    return (
+      isColombiaBusinessDateKey(record.trading_date) &&
+      isCleanAnalyticsCapture(capturedAt) &&
+      !isHistoricMonitoringGapDate(record.trading_date)
+    )
   })
 }
 

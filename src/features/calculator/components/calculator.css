@@ -1,0 +1,613 @@
+/* ── Trade calculator ──────────────────────────────────────────────────────────
+   Typographic, low-chrome layout: hierarchy comes from type size, colour and space,
+   not from bordered boxes. Mobile first; wider screens add columns. */
+.calc {
+  --calc-a-rgb: 52, 229, 255;
+  --calc-b-rgb: 176, 82, 255;
+  --calc-surface: #0b0e12;
+  --calc-mono: "IBM Plex Mono", monospace;
+  --calc-sans: "Manrope", "Segoe UI", sans-serif;
+  --calc-hair: rgba(244, 246, 248, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 2px 28px;
+}
+
+/* Top bar */
+.calc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.calc-bar__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.calc-bar__title h2 {
+  margin: 0;
+  font-family: var(--calc-sans);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.calc-bar__title span {
+  font-family: var(--calc-mono);
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+
+.calc-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calc-switch {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.calc-switch__option {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--calc-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.calc-switch__option--active {
+  background: rgba(var(--calc-b-rgb), 0.22);
+  color: var(--text);
+}
+
+.calc-bar__reset {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--calc-mono);
+  font-size: 0.68rem;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  transition: color 140ms ease, text-decoration-color 140ms ease;
+}
+
+.calc-bar__reset:hover,
+.calc-bar__reset:focus-visible {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
+
+/* Layout (mobile first: one column) */
+.calc-layout,
+.calc-cards,
+.calc-insights {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+.calc-insights {
+  padding-inline: 16px;
+}
+
+/* Scenario: a soft surface with an accent glow, no border box */
+.calc-card {
+  --accent-rgb: var(--calc-a-rgb);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 16px 18px;
+  border-radius: 18px;
+  background:
+    radial-gradient(140% 90% at 0% 0%, rgba(var(--accent-rgb), 0.1), transparent 55%),
+    rgba(255, 255, 255, 0.022);
+}
+
+.calc-card--b {
+  --accent-rgb: var(--calc-b-rgb);
+}
+
+/* Layout decisions inside a card depend on the card's own width (single or compare, any screen). */
+.calc-card {
+  container-type: inline-size;
+}
+
+.calc-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  min-width: 0;
+}
+
+/* The stock name is the select: a native select stretched invisibly over the title. */
+.calc-card__stock {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--calc-sans);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  cursor: pointer;
+}
+
+.calc-card__stock select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.calc-card__stock select option {
+  background: var(--calc-surface);
+  color: var(--text);
+}
+
+/* Today's range vs the typical daily range, top-right of the card. */
+.calc-card__range {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 16px;
+  margin: 0 0 0 auto;
+  text-align: right;
+}
+
+.calc-card__range dt {
+  font-family: var(--calc-mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.calc-card__range dd {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  margin: 2px 0 0;
+  color: var(--text);
+  font-family: var(--calc-sans);
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The planned buy→sell range leads, in the card's accent, as the figure being judged. */
+.calc-card__range-planned dt {
+  color: rgba(var(--accent-rgb), 0.9);
+}
+
+.calc-card__range dd small {
+  color: rgba(var(--accent-rgb), 0.9);
+  font-family: var(--calc-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.calc-card__caret {
+  width: 7px;
+  height: 7px;
+  margin-top: -4px;
+  border-right: 1.5px solid var(--text-faint);
+  border-bottom: 1.5px solid var(--text-faint);
+  transform: rotate(45deg);
+}
+
+.calc-card__stock:focus-within .calc-card__caret {
+  border-color: rgba(var(--accent-rgb), 1);
+}
+
+/* Inputs: big numbers on a single underline */
+.calc-card__inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "buy sell"
+    "size size";
+  gap: 14px 18px;
+}
+
+.calc-card__inputs > :nth-child(1) {
+  grid-area: buy;
+}
+
+.calc-card__inputs > :nth-child(2) {
+  grid-area: size;
+}
+
+.calc-card__inputs > :nth-child(3) {
+  grid-area: sell;
+}
+
+.calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.calc-field__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 28px;
+}
+
+.calc-field__label {
+  font-family: var(--calc-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.calc-field__label span {
+  opacity: 0.55;
+}
+
+/* "$ 10.000.000" on one underline: the line belongs to the wrapper, not the bare input. */
+.calc-amount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border-bottom: 1px solid rgba(244, 246, 248, 0.16);
+  transition: border-color 160ms ease;
+}
+
+.calc-amount:focus-within {
+  border-bottom-color: rgba(var(--accent-rgb), 1);
+}
+
+.calc-amount__affix {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-family: var(--calc-sans);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.calc-amount__affix--suffix {
+  font-family: var(--calc-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+}
+
+.calc-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--calc-sans);
+  /* 16px+ keeps iOS from zooming on focus. */
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 160ms ease;
+}
+
+.calc-input:focus {
+  outline: none;
+}
+
+.calc-field__hint {
+  margin-top: 4px;
+  font-family: var(--calc-mono);
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+
+.calc-field__hint strong {
+  color: rgba(var(--accent-rgb), 0.95);
+  font-weight: 600;
+}
+
+.calc-input::placeholder {
+  color: rgba(244, 246, 248, 0.18);
+  font-weight: 600;
+}
+
+.calc-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.calc-toggle__option {
+  min-height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--calc-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calc-toggle__option--active {
+  background: rgba(var(--accent-rgb), 0.22);
+  color: var(--text);
+}
+
+.calc-card__empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-family: var(--calc-mono);
+  font-size: 0.68rem;
+}
+
+/* Result */
+.calc-result__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Wide cards: per share / fees / shares sit beside the net result instead of under it. */
+@container (min-width: 520px) {
+  .calc-result__summary {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .calc-result__summary .calc-kpis {
+    flex: 0 1 auto;
+    grid-template-columns: repeat(3, auto);
+    column-gap: 28px;
+    padding-bottom: 4px;
+  }
+
+  .calc-result__summary .calc-kpi {
+    text-align: right;
+  }
+}
+
+.calc-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--calc-hair);
+}
+
+.calc-result__hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+}
+
+.calc-result__label {
+  flex-basis: 100%;
+  font-family: var(--calc-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.calc-result__value {
+  font-family: var(--calc-sans);
+  font-size: 2.15rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-result__value small {
+  font-size: 0.42em;
+  font-weight: 700;
+  letter-spacing: 0;
+  opacity: 0.55;
+}
+
+.calc-result__return {
+  font-family: var(--calc-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.calc-result__hero--positive .calc-result__value,
+.calc-result__hero--positive .calc-result__return {
+  color: var(--positive);
+}
+
+.calc-result__hero--negative .calc-result__value,
+.calc-result__hero--negative .calc-result__return {
+  color: var(--negative);
+}
+
+.calc-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 18px;
+  margin: 0;
+}
+
+.calc-kpi {
+  min-width: 0;
+}
+
+.calc-kpi dt {
+  font-family: var(--calc-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.calc-kpi dd {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--calc-sans);
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calc-ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--calc-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-ledger th,
+.calc-ledger td {
+  padding: 6px 0;
+  vertical-align: top;
+}
+
+.calc-ledger thead th {
+  padding-top: 0;
+  color: rgba(var(--accent-rgb), 0.9);
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.calc-ledger tbody th {
+  color: var(--text-faint);
+  font-weight: 400;
+  text-align: left;
+}
+
+.calc-ledger td {
+  color: var(--text-soft);
+  text-align: right;
+}
+
+.calc-ledger td span {
+  display: block;
+  font-size: 0.56rem;
+  color: var(--text-faint);
+}
+
+.calc-ledger__total th,
+.calc-ledger__total td {
+  border-top: 1px solid var(--calc-hair);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Comparison: one written paragraph */
+.calc-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.calc-compare--pending {
+  margin: 0;
+  color: var(--text-faint);
+  font-family: var(--calc-mono);
+  font-size: 0.68rem;
+}
+
+.calc-compare__verdict {
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--calc-sans);
+  font-size: 0.88rem;
+  font-weight: 400;
+  line-height: 1.65;
+  letter-spacing: 0;
+}
+
+.calc-compare__verdict strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.calc-compare__name {
+  font-weight: 600;
+}
+
+.calc-compare__name--a {
+  color: rgb(var(--calc-a-rgb));
+}
+
+.calc-compare__name--b {
+  color: rgb(var(--calc-b-rgb));
+}
+
+/* ── Wider screens ── */
+@media (min-width: 541px) {
+  .calc-card__inputs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas: "buy size sell";
+  }
+
+}
+
+@media (min-width: 901px) {
+  /* Single: one card, kept to a readable width. */
+  .calc-layout {
+    grid-template-columns: minmax(0, 760px);
+    gap: 24px;
+  }
+
+  /* Compare: both cards side by side, the written comparison underneath. */
+  .calc--compare .calc-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calc--compare .calc-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .calc-insights {
+    padding: 4px 0 0;
+  }
+}

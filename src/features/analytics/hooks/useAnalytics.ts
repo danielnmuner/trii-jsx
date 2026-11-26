@@ -344,7 +344,7 @@ function mergeZscoreWindowRecords(existingRecords: ZscoreOpportunityRecord[], in
   return filterZscoreOpportunityRecords(sorted)
 }
 
-async function fetchDailyClosingWindow(symbol: string): Promise<DailyClosingWindow> {
+export async function fetchDailyClosingWindow(symbol: string): Promise<DailyClosingWindow> {
   const response = await fetchDailyClosingSnapshots(symbol)
   return {
     symbol,

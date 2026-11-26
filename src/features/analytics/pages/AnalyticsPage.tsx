@@ -19,6 +19,7 @@ import { useDailyOrderPositionTimeline } from '../hooks/useDailyOrderPositionTim
 import { usePaperworkAuth } from '../../paperwork/auth/usePaperworkAuth'
 import { PaperworkAccessGate } from '../../paperwork/components/PaperworkAccessGate'
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
+import { CalculatorPanel } from '../../calculator/components/CalculatorPanel'
 import { usePaperworkAnalytics } from '../../paperwork/hooks/usePaperworkAnalytics'
 import { useActiveIssuers } from '../../issuers/hooks/useActiveIssuers'
 import { resolveOverviewTradingDate } from '../lib/analyticsDataPolicy'
@@ -34,7 +35,7 @@ import { rankCoreSymbols, type CoreSortIntent } from '../lib/coreSymbolSorting'
 import { deriveFreshnessTone } from '../lib/freshness'
 
 // Benchmark Stats is disabled: not listed, not reachable, not rendered.
-const topTabs = ['Overview', 'Historic', 'User Guide', 'Paperwork'] as const
+const topTabs = ['Overview', 'Historic', 'Calculator', 'User Guide', 'Paperwork'] as const
 const visibleTopTabs = topTabs.filter((tab) => tab !== 'User Guide')
 const MIN_OVERVIEW_SAMPLE_COUNT = 10
 const historicRangeOptions = [365, 180, 90, 30, 15, 7] as const
@@ -87,6 +88,10 @@ export function AnalyticsPage() {
 
   const snapshotsQuery = useAnalyticsSnapshots(querySelectedSymbols)
   const dailyClosingQuery = useDailyClosingSnapshots(querySelectedSymbols, activeTab === 'Historic')
+  const snapshotBySymbol = useMemo(
+    () => Object.fromEntries(snapshotsQuery.results.map((result) => [result.symbol, result.current_snapshot])),
+    [snapshotsQuery.results],
+  )
   const overviewEmptyState = describeOverviewEmptyState({
     tradingDate: resolveOverviewTradingDate(),
     tradingDaySnapshotCount: snapshotsQuery.results.length,
@@ -324,7 +329,7 @@ export function AnalyticsPage() {
     hasDailyClosingData &&
     hasSevereCoverageLoss(orderedDailyClosingResults.length, querySelectedSymbols.length)
   const activeDataStatus = useMemo(() => {
-    if (activeTab === 'Paperwork') {
+    if (activeTab === 'Paperwork' || activeTab === 'Calculator') {
       return {
         label: 'Ready',
         tone: 'live' as const,
@@ -460,7 +465,9 @@ export function AnalyticsPage() {
         ) : null}
       </div>
 
-      <section className={`analytics-stage${activeTab === 'Paperwork' ? ' analytics-stage--scroll' : ''}`}>
+      <section
+        className={`analytics-stage${activeTab === 'Paperwork' || activeTab === 'Calculator' ? ' analytics-stage--scroll' : ''}`}
+      >
         {activeTab === 'Overview' ? (
           !hasSnapshotData && snapshotsQuery.isError ? (
             <StatusState
@@ -509,6 +516,10 @@ export function AnalyticsPage() {
           <p className="historic-gap-note">
             Nov 9–20 omitted: a capture extension issue left those days without prices. Resolved Nov 23.
           </p>
+        ) : null}
+
+        {activeTab === 'Calculator' ? (
+          <CalculatorPanel symbols={orderedIssuerSymbols} snapshotBySymbol={snapshotBySymbol} />
         ) : null}
 
         {activeTab === 'Paperwork' ? (

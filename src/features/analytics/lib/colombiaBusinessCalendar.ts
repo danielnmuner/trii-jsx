@@ -13,8 +13,49 @@ const bogotaTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   hour12: false,
 })
 
-const BOGOTA_TRADING_SESSION_START_SECONDS = 8 * 60 * 60 + 30 * 60
-const BOGOTA_TRADING_SESSION_END_SECONDS = 16 * 60 * 60
+/**
+ * BVC session hours (Bogota time) move with New York's daylight-saving switch:
+ * - summer schedule, from the 2nd Sunday of March to the 1st Sunday of November: 08:30–15:00
+ * - winter schedule, the rest of the year: 09:30–16:00
+ * Same rule as the capture extension and the backend lambdas.
+ */
+export type BvcSessionBounds = {
+  schedule: 'summer' | 'winter'
+  startSeconds: number
+  endSeconds: number
+}
+
+const BVC_SUMMER_SESSION: BvcSessionBounds = { schedule: 'summer', startSeconds: 8 * 3600 + 30 * 60, endSeconds: 15 * 3600 }
+const BVC_WINTER_SESSION: BvcSessionBounds = { schedule: 'winter', startSeconds: 9 * 3600 + 30 * 60, endSeconds: 16 * 3600 }
+
+/** Captures stamped up to this long after the close still carry that day's closing price. */
+const POST_CLOSE_GRACE_SECONDS = 60 * 60
+
+export function getBvcSessionBounds(dateKey: string): BvcSessionBounds {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+  if (!match) {
+    return BVC_WINTER_SESSION
+  }
+
+  const year = Number(match[1])
+  const summerStart = toDateKey(nthSundayOfMonthUtc(year, 3, 2))
+  const winterStart = toDateKey(nthSundayOfMonthUtc(year, 11, 1))
+  return dateKey >= summerStart && dateKey < winterStart ? BVC_SUMMER_SESSION : BVC_WINTER_SESSION
+}
+
+/** Seconds since midnight in Bogota, or NaN for an invalid date. */
+export function getBogotaSecondsFromMidnight(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return Number.NaN
+  }
+
+  const parts = bogotaTimeFormatter.formatToParts(date)
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value)
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value)
+  const second = Number(parts.find((part) => part.type === 'second')?.value)
+  return [hour, minute, second].some((part) => Number.isNaN(part)) ? Number.NaN : (hour % 24) * 3600 + minute * 60 + second
+}
 
 export function getBogotaDateKey(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value)
@@ -43,26 +84,24 @@ export function isBogotaBusinessInstant(value: string | Date) {
   return isColombiaBusinessDateKey(dateKey)
 }
 
+/**
+ * True for an instant inside that day's BVC session (open → close, plus a short post-close grace
+ * for captures stamped right after the close).
+ */
 export function isBogotaTradingSessionInstant(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime()) || !isBogotaBusinessInstant(date)) {
     return false
   }
 
-  const parts = bogotaTimeFormatter.formatToParts(date)
-  const hour = Number(parts.find((part) => part.type === 'hour')?.value)
-  const minute = Number(parts.find((part) => part.type === 'minute')?.value)
-  const second = Number(parts.find((part) => part.type === 'second')?.value)
-
-  if ([hour, minute, second].some((valuePart) => Number.isNaN(valuePart))) {
+  const dateKey = getBogotaDateKey(date)
+  const secondsFromMidnight = getBogotaSecondsFromMidnight(date)
+  if (!dateKey || Number.isNaN(secondsFromMidnight)) {
     return false
   }
 
-  const secondsFromMidnight = hour * 60 * 60 + minute * 60 + second
-  return (
-    secondsFromMidnight >= BOGOTA_TRADING_SESSION_START_SECONDS &&
-    secondsFromMidnight <= BOGOTA_TRADING_SESSION_END_SECONDS
-  )
+  const session = getBvcSessionBounds(dateKey)
+  return secondsFromMidnight >= session.startSeconds && secondsFromMidnight <= session.endSeconds + POST_CLOSE_GRACE_SECONDS
 }
 
 export function isColombiaBusinessDateKey(dateKey: string) {
@@ -137,6 +176,13 @@ function computeEasterSundayUtc(year: number) {
   const day = ((h + l - 7 * m + 114) % 31) + 1
 
   return createUtcDate(year, month, day)
+}
+
+/** The `nth` Sunday (1-based) of `month` (1–12) in `year`, as a UTC date. */
+function nthSundayOfMonthUtc(year: number, month: number, nth: number) {
+  const first = createUtcDate(year, month, 1)
+  const firstSunday = 1 + ((7 - first.getUTCDay()) % 7)
+  return createUtcDate(year, month, firstSunday + (nth - 1) * 7)
 }
 
 function moveToNextMonday(date: Date) {

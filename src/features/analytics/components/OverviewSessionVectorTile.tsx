@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import type { SessionVectorManifest, SessionVectorSegment } from '../api/schemas'
+import { getBvcSessionBounds } from '../lib/colombiaBusinessCalendar'
 import { formatInteger, formatNumber } from '../lib/formatters'
 
 type SessionVectorWindow = {
@@ -527,7 +528,7 @@ function formatSessionClock(
   pointIndex: number,
   samplingSeconds: number,
 ) {
-  const start = resolveSessionBoundary(sessionStart, tradingDate, '08:30:00-05:00')
+  const start = resolveSessionBoundary(sessionStart, tradingDate, formatSessionStartTime(tradingDate))
   if (!start || Number.isNaN(start.getTime())) {
     return 'n/a'
   }
@@ -540,6 +541,14 @@ function formatSessionClock(
     minute: '2-digit',
     hour12: false,
   }).format(date)
+}
+
+/** Fallback session start (used only when the backend manifest has none), per the BVC schedule. */
+function formatSessionStartTime(tradingDate: string | undefined) {
+  const startSeconds = getBvcSessionBounds(tradingDate ?? '').startSeconds
+  const hours = `${Math.floor(startSeconds / 3600)}`.padStart(2, '0')
+  const minutes = `${Math.floor((startSeconds % 3600) / 60)}`.padStart(2, '0')
+  return `${hours}:${minutes}:00-05:00`
 }
 
 function resolveSessionBoundary(

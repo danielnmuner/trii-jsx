@@ -1,5 +1,12 @@
 import type { AnalyticsSymbolFeed, DailyClosingRecord, ZscoreOpportunityRecord } from '../api/schemas'
-import { getBogotaDateKey, isBogotaBusinessInstant, isBogotaTradingSessionInstant, isColombiaBusinessDateKey } from './colombiaBusinessCalendar'
+import {
+  getBogotaDateKey,
+  getBogotaSecondsFromMidnight,
+  getBvcSessionBounds,
+  isBogotaBusinessInstant,
+  isBogotaTradingSessionInstant,
+  isColombiaBusinessDateKey,
+} from './colombiaBusinessCalendar'
 
 export function isCleanAnalyticsCapture(value: string | Date) {
   return isBogotaTradingSessionInstant(value)
@@ -98,13 +105,18 @@ function resolveSnapshotTradingDate(snapshot: AnalyticsSymbolFeed['current_snaps
   return getBogotaDateKey(snapshot.captured_at)
 }
 
+/**
+ * The trading day Overview shows: today once that day's BVC session has opened (08:30 in the summer
+ * schedule, 09:30 in the winter one), otherwise the previous business day.
+ */
 export function resolveOverviewTradingDate(reference = new Date()) {
   const bogotaDate = getBogotaDateKey(reference)
   if (!bogotaDate) {
     return null
   }
 
-  if (!isColombiaBusinessDateKey(bogotaDate) || getBogotaSecondsFromMidnight(reference) < 8 * 60 * 60 + 30 * 60) {
+  const sessionStart = getBvcSessionBounds(bogotaDate).startSeconds
+  if (!isColombiaBusinessDateKey(bogotaDate) || getBogotaSecondsFromMidnight(reference) < sessionStart) {
     return findPreviousBusinessDateKey(bogotaDate)
   }
 
@@ -157,31 +169,6 @@ function findPreviousBusinessDateKey(dateKey: string) {
   } while (!isColombiaBusinessDateKey(toDateKey(date)))
 
   return toDateKey(date)
-}
-
-function getBogotaSecondsFromMidnight(value: string | Date) {
-  const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return Number.NaN
-  }
-
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/Bogota',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).formatToParts(date)
-
-  const hour = Number(parts.find((part) => part.type === 'hour')?.value)
-  const minute = Number(parts.find((part) => part.type === 'minute')?.value)
-  const second = Number(parts.find((part) => part.type === 'second')?.value)
-
-  if ([hour, minute, second].some((part) => Number.isNaN(part))) {
-    return Number.NaN
-  }
-
-  return hour * 60 * 60 + minute * 60 + second
 }
 
 function toDateKey(date: Date) {

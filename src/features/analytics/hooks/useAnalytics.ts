@@ -79,10 +79,20 @@ export function useAnalyticsSnapshots(symbols: string[]) {
       .map((item) => (item ? sanitizeAnalyticsSymbolFeed(item) : null))
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
     const lastUpdatedAt = queries.reduce((maxValue, query) => Math.max(maxValue, query.dataUpdatedAt ?? 0), 0)
+    // Latest capture received from the API before the trading-day filter, so an empty overview can
+    // say when data last arrived.
+    const latestCapturedAt = queries.reduce<string | null>((latest, query) => {
+      const capturedAt = query.data?.current_snapshot?.captured_at
+      if (!capturedAt || Number.isNaN(new Date(capturedAt).getTime())) {
+        return latest
+      }
+      return !latest || new Date(capturedAt).getTime() > new Date(latest).getTime() ? capturedAt : latest
+    }, null)
 
     return {
       results,
       lastUpdatedAt,
+      latestCapturedAt,
       isLoading: queries.some((query) => query.isLoading),
       isFetching: queries.some((query) => query.isFetching),
       isError: queries.some((query) => query.isError),

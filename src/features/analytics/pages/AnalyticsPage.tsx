@@ -21,6 +21,8 @@ import { PaperworkAccessGate } from '../../paperwork/components/PaperworkAccessG
 import { PaperworkPanel } from '../../paperwork/components/PaperworkPanel'
 import { usePaperworkAnalytics } from '../../paperwork/hooks/usePaperworkAnalytics'
 import { useActiveIssuers } from '../../issuers/hooks/useActiveIssuers'
+import { resolveOverviewTradingDate } from '../lib/analyticsDataPolicy'
+import { describeOverviewEmptyState } from '../lib/overviewEmptyState'
 import { MarketTape } from '../../market-tape/components/MarketTape'
 import type { AnalyticsSymbolFeed } from '../api/schemas'
 import {
@@ -85,6 +87,11 @@ export function AnalyticsPage() {
 
   const snapshotsQuery = useAnalyticsSnapshots(querySelectedSymbols)
   const dailyClosingQuery = useDailyClosingSnapshots(querySelectedSymbols, activeTab === 'Historic')
+  const overviewEmptyState = describeOverviewEmptyState({
+    tradingDate: resolveOverviewTradingDate(),
+    tradingDaySnapshotCount: snapshotsQuery.results.length,
+    latestCapturedAt: snapshotsQuery.latestCapturedAt,
+  })
   const eligibleOverviewResults = useMemo(
     () => snapshotsQuery.results.filter((result) => resolveOverviewSampleCount(result) >= MIN_OVERVIEW_SAMPLE_COUNT),
     [snapshotsQuery.results],
@@ -464,7 +471,7 @@ export function AnalyticsPage() {
           ) : !hasSnapshotData && snapshotsQuery.isLoading ? (
             null
           ) : eligibleOverviewResults.length === 0 ? (
-            <StatusState title="No Data" description="No symbols meet the minimum sample support required for overview." />
+            <StatusState {...overviewEmptyState} />
           ) : (
             <OverviewPanel
               snapshots={orderedEligibleOverviewResults}
